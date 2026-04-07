@@ -68,7 +68,6 @@ interface AppState {
     settings: boolean;
   };
   error: string | null;
-  notification: { type: 'success' | 'error'; message: string } | null;
 }
 
 const initialState: AppState = {
@@ -96,7 +95,6 @@ const initialState: AppState = {
     settings: true,
   },
   error: null,
-  notification: null,
 };
 
 // --- Actions ---
@@ -108,7 +106,6 @@ type AppAction =
   | { type: 'SET_DISPLAY_CURRENCY'; payload: Currency }
   | { type: 'SET_LOADING'; collection: keyof AppState['loading']; isLoading: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
-  | { type: 'SET_NOTIFICATION'; payload: { type: 'success' | 'error'; message: string } | null }
   // Optimistic updates for non-realtime collections
   | { type: 'ADD_ITEM'; collection: 'products' | 'legalEntities' | 'budgetCategories'; payload: any }
   | { type: 'UPDATE_ITEM'; collection: 'products' | 'legalEntities' | 'budgetCategories'; payload: any }
@@ -132,8 +129,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, loading: { ...state.loading, [action.collection]: action.isLoading } };
     case 'SET_ERROR':
       return { ...state, error: action.payload };
-    case 'SET_NOTIFICATION':
-      return { ...state, notification: action.payload };
     case 'ADD_ITEM':
       return {
         ...state,
@@ -213,7 +208,6 @@ interface AppContextType extends AppState {
   setDisplayCurrency: (currency: Currency) => void;
   
   // Helpers
-  clearNotification: () => void;
   formatMoney: (amount: number, fromCurrency?: Currency) => string;
   convert: (amount: number, from: Currency, to: Currency) => number;
 }
@@ -331,11 +325,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const generateId = () => crypto.randomUUID();
   const now = () => new Date().toISOString();
 
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    dispatch({ type: 'SET_NOTIFICATION', payload: { type, message } });
-    setTimeout(() => dispatch({ type: 'SET_NOTIFICATION', payload: null }), 5000);
-  };
-
   // --- CRUD Implementations ---
 
   // Projects
@@ -343,9 +332,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'projects', id), { ...project, id, createdAt: now(), updatedAt: now() });
-      showNotification('success', 'Project created successfully');
+      console.log('[AppContext]', 'success', 'Project created successfully');
     } catch (error) {
-      showNotification('error', 'Failed to create project');
+      console.log('[AppContext]', 'error', 'Failed to create project');
       throw error;
     }
   };
@@ -353,9 +342,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const updateProject = async (id: string, data: Partial<Project>) => {
     try {
       await updateDoc(doc(db, 'projects', id), { ...data, updatedAt: now() });
-      showNotification('success', 'Project updated successfully');
+      console.log('[AppContext]', 'success', 'Project updated successfully');
     } catch (error) {
-      showNotification('error', 'Failed to update project');
+      console.log('[AppContext]', 'error', 'Failed to update project');
       throw error;
     }
   };
@@ -363,9 +352,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteProject = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'projects', id));
-      showNotification('success', 'Project deleted successfully');
+      console.log('[AppContext]', 'success', 'Project deleted successfully');
     } catch (error) {
-      showNotification('error', 'Failed to delete project');
+      console.log('[AppContext]', 'error', 'Failed to delete project');
       throw error;
     }
   };
@@ -382,9 +371,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         milestones: updatedMilestones,
         updatedAt: now()
       });
-      showNotification('success', 'Milestone added');
+      console.log('[AppContext]', 'success', 'Milestone added');
     } catch (error) {
-      showNotification('error', 'Failed to add milestone');
+      console.log('[AppContext]', 'error', 'Failed to add milestone');
     }
   };
 
@@ -401,9 +390,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         milestones: updatedMilestones,
         updatedAt: now()
       });
-      showNotification('success', 'Milestone updated');
+      console.log('[AppContext]', 'success', 'Milestone updated');
     } catch (error) {
-      showNotification('error', 'Failed to update milestone');
+      console.log('[AppContext]', 'error', 'Failed to update milestone');
     }
   };
 
@@ -418,9 +407,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         milestones: updatedMilestones,
         updatedAt: now()
       });
-      showNotification('success', 'Milestone deleted');
+      console.log('[AppContext]', 'success', 'Milestone deleted');
     } catch (error) {
-      showNotification('error', 'Failed to delete milestone');
+      console.log('[AppContext]', 'error', 'Failed to delete milestone');
     }
   };
 
@@ -482,10 +471,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
 
       await batch.commit();
-      showNotification('success', 'Milestone completed — invoice draft created');
+      console.log('[AppContext]', 'success', 'Milestone completed — invoice draft created');
     } catch (error) {
       console.error(error);
-      showNotification('error', 'Failed to complete milestone');
+      console.log('[AppContext]', 'error', 'Failed to complete milestone');
     }
   };
 
@@ -494,18 +483,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'billingDocuments', id), { ...docData, id, createdAt: now(), updatedAt: now() });
-      showNotification('success', 'Document created');
+      console.log('[AppContext]', 'success', 'Document created');
     } catch (error) {
-      showNotification('error', 'Failed to create document');
+      console.log('[AppContext]', 'error', 'Failed to create document');
     }
   };
 
   const updateBillingDocument = async (id: string, data: Partial<BillingDocument>) => {
     try {
       await updateDoc(doc(db, 'billingDocuments', id), { ...data, updatedAt: now() });
-      showNotification('success', 'Document updated');
+      console.log('[AppContext]', 'success', 'Document updated');
     } catch (error) {
-      showNotification('error', 'Failed to update document');
+      console.log('[AppContext]', 'error', 'Failed to update document');
     }
   };
 
@@ -562,10 +551,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await batch.commit();
-      showNotification('success', `Document issued: ${documentNumber}`);
+      console.log('[AppContext]', 'success', `Document issued: ${documentNumber}`);
     } catch (error) {
       console.error(error);
-      showNotification('error', 'Failed to issue document');
+      console.log('[AppContext]', 'error', 'Failed to issue document');
     }
   };
 
@@ -580,9 +569,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'payments', id), { ...payment, id, createdAt: now() });
-      showNotification('success', 'Payment recorded');
+      console.log('[AppContext]', 'success', 'Payment recorded');
     } catch (error) {
-      showNotification('error', 'Failed to record payment');
+      console.log('[AppContext]', 'error', 'Failed to record payment');
     }
   };
 
@@ -632,10 +621,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       });
 
       await batch.commit();
-      showNotification('success', 'Payment allocated');
+      console.log('[AppContext]', 'success', 'Payment allocated');
     } catch (error) {
       console.error(error);
-      showNotification('error', 'Failed to allocate payment');
+      console.log('[AppContext]', 'error', 'Failed to allocate payment');
     }
   };
 
@@ -644,27 +633,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'subscriptions', id), { ...sub, id, createdAt: now(), updatedAt: now() });
-      showNotification('success', 'Subscription created');
+      console.log('[AppContext]', 'success', 'Subscription created');
     } catch (error) {
-      showNotification('error', 'Failed to create subscription');
+      console.log('[AppContext]', 'error', 'Failed to create subscription');
     }
   };
 
   const updateSubscription = async (id: string, data: Partial<Subscription>) => {
     try {
       await updateDoc(doc(db, 'subscriptions', id), { ...data, updatedAt: now() });
-      showNotification('success', 'Subscription updated');
+      console.log('[AppContext]', 'success', 'Subscription updated');
     } catch (error) {
-      showNotification('error', 'Failed to update subscription');
+      console.log('[AppContext]', 'error', 'Failed to update subscription');
     }
   };
 
   const deleteSubscription = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'subscriptions', id));
-      showNotification('success', 'Subscription deleted');
+      console.log('[AppContext]', 'success', 'Subscription deleted');
     } catch (error) {
-      showNotification('error', 'Failed to delete subscription');
+      console.log('[AppContext]', 'error', 'Failed to delete subscription');
     }
   };
 
@@ -676,7 +665,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       );
 
       if (dueSubscriptions.length === 0) {
-        showNotification('success', 'No subscriptions due for billing');
+        console.log('[AppContext]', 'success', 'No subscriptions due for billing');
         return;
       }
 
@@ -742,10 +731,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await batch.commit();
-      showNotification('success', `Billing job completed. Generated ${count} invoices.`);
+      console.log('[AppContext]', 'success', `Billing job completed. Generated ${count} invoices.`);
     } catch (error) {
       console.error(error);
-      showNotification('error', 'Billing job failed');
+      console.log('[AppContext]', 'error', 'Billing job failed');
     }
   };
 
@@ -754,27 +743,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'counterparties', id), { ...cp, id, createdAt: now() });
-      showNotification('success', 'Counterparty added');
+      console.log('[AppContext]', 'success', 'Counterparty added');
     } catch (error) {
-      showNotification('error', 'Failed to add counterparty');
+      console.log('[AppContext]', 'error', 'Failed to add counterparty');
     }
   };
 
   const updateCounterparty = async (id: string, data: Partial<Counterparty>) => {
     try {
       await updateDoc(doc(db, 'counterparties', id), data);
-      showNotification('success', 'Counterparty updated');
+      console.log('[AppContext]', 'success', 'Counterparty updated');
     } catch (error) {
-      showNotification('error', 'Failed to update counterparty');
+      console.log('[AppContext]', 'error', 'Failed to update counterparty');
     }
   };
 
   const deleteCounterparty = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'counterparties', id));
-      showNotification('success', 'Counterparty deleted');
+      console.log('[AppContext]', 'success', 'Counterparty deleted');
     } catch (error) {
-      showNotification('error', 'Failed to delete counterparty');
+      console.log('[AppContext]', 'error', 'Failed to delete counterparty');
     }
   };
 
@@ -785,10 +774,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'ADD_ITEM', collection: 'products', payload: newProduct });
     try {
       await setDoc(doc(db, 'products', id), newProduct);
-      showNotification('success', 'Product added');
+      console.log('[AppContext]', 'success', 'Product added');
     } catch (error) {
       dispatch({ type: 'DELETE_ITEM', collection: 'products', id }); // Rollback
-      showNotification('error', 'Failed to add product');
+      console.log('[AppContext]', 'error', 'Failed to add product');
     }
   };
 
@@ -797,10 +786,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: { id, ...data } });
     try {
       await updateDoc(doc(db, 'products', id), data);
-      showNotification('success', 'Product updated');
+      console.log('[AppContext]', 'success', 'Product updated');
     } catch (error) {
       if (original) dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: original }); // Rollback
-      showNotification('error', 'Failed to update product');
+      console.log('[AppContext]', 'error', 'Failed to update product');
     }
   };
 
@@ -811,27 +800,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'legalEntities', id), { ...entity, id });
-      showNotification('success', 'Legal entity added');
+      console.log('[AppContext]', 'success', 'Legal entity added');
     } catch (error) {
-      showNotification('error', 'Failed to add legal entity');
+      console.log('[AppContext]', 'error', 'Failed to add legal entity');
     }
   };
 
   const updateLegalEntity = async (id: string, data: Partial<LegalEntity>) => {
     try {
       await updateDoc(doc(db, 'legalEntities', id), data);
-      showNotification('success', 'Legal entity updated');
+      console.log('[AppContext]', 'success', 'Legal entity updated');
     } catch (error) {
-      showNotification('error', 'Failed to update legal entity');
+      console.log('[AppContext]', 'error', 'Failed to update legal entity');
     }
   };
 
   const deleteLegalEntity = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'legalEntities', id));
-      showNotification('success', 'Legal entity deleted');
+      console.log('[AppContext]', 'success', 'Legal entity deleted');
     } catch (error) {
-      showNotification('error', 'Failed to delete legal entity');
+      console.log('[AppContext]', 'error', 'Failed to delete legal entity');
     }
   };
 
@@ -840,27 +829,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'budgetCategories', id), { ...category, id });
-      showNotification('success', 'Budget category added');
+      console.log('[AppContext]', 'success', 'Budget category added');
     } catch (error) {
-      showNotification('error', 'Failed to add budget category');
+      console.log('[AppContext]', 'error', 'Failed to add budget category');
     }
   };
 
   const updateBudgetCategory = async (id: string, data: Partial<BudgetCategory>) => {
     try {
       await updateDoc(doc(db, 'budgetCategories', id), data);
-      showNotification('success', 'Budget category updated');
+      console.log('[AppContext]', 'success', 'Budget category updated');
     } catch (error) {
-      showNotification('error', 'Failed to update budget category');
+      console.log('[AppContext]', 'error', 'Failed to update budget category');
     }
   };
 
   const deleteBudgetCategory = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'budgetCategories', id));
-      showNotification('success', 'Budget category deleted');
+      console.log('[AppContext]', 'success', 'Budget category deleted');
     } catch (error) {
-      showNotification('error', 'Failed to delete budget category');
+      console.log('[AppContext]', 'error', 'Failed to delete budget category');
     }
   };
 
@@ -871,10 +860,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_SETTINGS', payload: newSettings });
     try {
       await updateDoc(doc(db, 'appSettings', 'config'), settings);
-      showNotification('success', 'Settings updated');
+      console.log('[AppContext]', 'success', 'Settings updated');
     } catch (error) {
       dispatch({ type: 'SET_SETTINGS', payload: original });
-      showNotification('error', 'Failed to update settings');
+      console.log('[AppContext]', 'error', 'Failed to update settings');
     }
   };
 
@@ -902,8 +891,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }).format(converted);
   };
 
-  const clearNotification = () => dispatch({ type: 'SET_NOTIFICATION', payload: null });
-
   const value = {
     ...state,
     addProject, updateProject, deleteProject,
@@ -917,7 +904,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addBudgetCategory, updateBudgetCategory, deleteBudgetCategory,
     updateSettings,
     setDisplayCurrency,
-    clearNotification,
     formatMoney,
     convert
   };

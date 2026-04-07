@@ -17,7 +17,7 @@ export default function CMSDashboardPage() {
 
   const signedThisMonth = contracts.filter(c => {
     if (c.status !== 'موقّع' && c.status !== 'نشط') return false;
-    const date = new Date(c.start_date || c.created_at || Date.now());
+    const date = new Date(c.start_date || Date.now());
     return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
   }).length;
 
@@ -35,7 +35,7 @@ export default function CMSDashboardPage() {
   ];
 
   const recentContracts = [...contracts]
-    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    .sort((a, b) => new Date(b.start_date || 0).getTime() - new Date(a.start_date || 0).getTime())
     .slice(0, 5);
 
   const today = new Date().toISOString().split('T')[0];

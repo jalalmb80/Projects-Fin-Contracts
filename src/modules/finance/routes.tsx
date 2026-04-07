@@ -16,35 +16,38 @@ import ProductsPage from './pages/ProductsPage';
 import SettingsPage from './pages/SettingsPage';
 import { AppProvider } from './context/AppContext';
 import { LanguageProvider } from './context/LanguageContext';
+import { ToastProvider } from './components/ui/Toast';
 
 export default function FinanceRoutes() {
   return (
     <LanguageProvider>
       <AppProvider>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="projects">
-              <Route index element={<ProjectListPage />} />
-              <Route path=":id" element={<ProjectDetailPage />} />
+        <ToastProvider>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="projects">
+                <Route index element={<ProjectListPage />} />
+                <Route path=":id" element={<ProjectDetailPage />} />
+              </Route>
+              <Route path="subscriptions">
+                <Route index element={<SubscriptionListPage />} />
+                <Route path="new" element={<SubscriptionFormPage />} />
+                <Route path=":id" element={<SubscriptionDetailPage />} />
+              </Route>
+              <Route path="billing">
+                <Route index element={<BillingListPage />} />
+                <Route path="new" element={<BillingFormPage />} />
+                <Route path=":id" element={<BillingDetailPage />} />
+              </Route>
+              <Route path="payments" element={<PaymentsPage />} />
+              <Route path="counterparties" element={<CounterpartiesPage />} />
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
-            <Route path="subscriptions">
-              <Route index element={<SubscriptionListPage />} />
-              <Route path="new" element={<SubscriptionFormPage />} />
-              <Route path=":id" element={<SubscriptionDetailPage />} />
-            </Route>
-            <Route path="billing">
-              <Route index element={<BillingListPage />} />
-              <Route path="new" element={<BillingFormPage />} />
-              <Route path=":id" element={<BillingDetailPage />} />
-            </Route>
-            <Route path="payments" element={<PaymentsPage />} />
-            <Route path="counterparties" element={<CounterpartiesPage />} />
-            <Route path="products" element={<ProductsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
-        </Routes>
+          </Routes>
+        </ToastProvider>
       </AppProvider>
     </LanguageProvider>
   );

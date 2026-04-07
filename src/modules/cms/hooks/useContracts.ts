@@ -5,8 +5,10 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
 import { Contract, Client, ContractTemplate, Project } from '../types';
+import { usePlatform } from '../../../core/context/PlatformContext';
 
 export function useContracts() {
+  const { user } = usePlatform();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
@@ -16,6 +18,11 @@ export function useContracts() {
   const uid = () => crypto.randomUUID();
 
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     const unsubs = [
       onSnapshot(query(collection(db, 'cms_contracts'), orderBy('start_date', 'desc')),
         snap => { setContracts(snap.docs.map(d => d.data() as Contract)); setLoading(false); }),
@@ -27,7 +34,7 @@ export function useContracts() {
         snap => setProjects(snap.docs.map(d => d.data() as Project))),
     ];
     return () => unsubs.forEach(u => u());
-  }, []);
+  }, [user]);
 
   const addContract = async (c: Omit<Contract, 'id'>) => {
     const id = uid();
