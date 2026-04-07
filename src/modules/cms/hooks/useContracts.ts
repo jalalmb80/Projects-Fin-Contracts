@@ -4,12 +4,13 @@ import {
   doc, setDoc, updateDoc, deleteDoc
 } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
-import { Contract, Client, ContractTemplate } from '../types';
+import { Contract, Client, ContractTemplate, Project } from '../types';
 
 export function useContracts() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const now = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
@@ -22,6 +23,8 @@ export function useContracts() {
         snap => setClients(snap.docs.map(d => d.data() as Client))),
       onSnapshot(query(collection(db, 'cms_templates'), orderBy('name_ar')),
         snap => setTemplates(snap.docs.map(d => d.data() as ContractTemplate))),
+      onSnapshot(query(collection(db, 'cms_projects'), orderBy('name_ar')),
+        snap => setProjects(snap.docs.map(d => d.data() as Project))),
     ];
     return () => unsubs.forEach(u => u());
   }, []);
@@ -53,10 +56,20 @@ export function useContracts() {
   const deleteTemplate = async (id: string) =>
     deleteDoc(doc(db, 'cms_templates', id));
 
+  const addProject = async (p: Omit<Project, 'id'>) => {
+    const id = uid();
+    await setDoc(doc(db, 'cms_projects', id), { ...p, id });
+  };
+  const updateProject = async (id: string, data: Partial<Project>) =>
+    updateDoc(doc(db, 'cms_projects', id), data);
+  const deleteProject = async (id: string) =>
+    deleteDoc(doc(db, 'cms_projects', id));
+
   return {
-    contracts, clients, templates, loading,
+    contracts, clients, templates, projects, loading,
     addContract, updateContract, deleteContract,
     addClient, updateClient, deleteClient,
     addTemplate, updateTemplate, deleteTemplate,
+    addProject, updateProject, deleteProject,
   };
 }

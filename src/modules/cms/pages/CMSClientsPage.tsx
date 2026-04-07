@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
-import { usePlatform } from '../../../core/context/PlatformContext';
 import { useContracts } from '../hooks/useContracts';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
-import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../../core/firebase';
 
 export default function CMSClientsPage() {
-  const { counterparties } = usePlatform();
-  const { contracts } = useContracts();
+  const { clients, contracts, addClient, updateClient, deleteClient } = useContracts();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -26,13 +22,13 @@ export default function CMSClientsPage() {
       setEditingId(client.id);
       setFormData({
         name: client.name || '',
-        nameAr: client.nameAr || '',
+        nameAr: client.nameAr || client.name_ar || '',
         email: client.email || '',
         phone: client.phone || '',
         address: client.address || '',
         city: client.city || '',
         taxId: client.taxId || '',
-        contactPerson: client.contactPerson || ''
+        contactPerson: client.contactPerson || client.representative_name || ''
       });
     } else {
       setEditingId(null);
@@ -47,15 +43,12 @@ export default function CMSClientsPage() {
     e.preventDefault();
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'counterparties', editingId), formData);
+        await updateClient(editingId, formData as any);
       } else {
-        const newId = crypto.randomUUID();
-        await setDoc(doc(db, 'counterparties', newId), {
+        await addClient({
           ...formData,
-          id: newId,
-          type: 'CUSTOMER', // Default type for CMS clients
           createdAt: new Date().toISOString()
-        });
+        } as any);
       }
       setIsModalOpen(false);
     } catch (error) {
@@ -67,7 +60,7 @@ export default function CMSClientsPage() {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this client?')) {
       try {
-        await deleteDoc(doc(db, 'counterparties', id));
+        await deleteClient(id);
       } catch (error) {
         console.error('Error deleting client:', error);
         alert('Failed to delete client');
@@ -105,12 +98,12 @@ export default function CMSClientsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {counterparties.map(client => (
+            {clients.map(client => (
               <tr key={client.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                  {client.nameAr || client.name}
+                  {(client as any).nameAr || client.name_ar || (client as any).name}
                 </td>
-                <td className="px-6 py-4 text-sm text-slate-600">{client.contactPerson || '-'}</td>
+                <td className="px-6 py-4 text-sm text-slate-600">{(client as any).contactPerson || client.representative_name || '-'}</td>
                 <td className="px-6 py-4 text-sm text-slate-500">{client.email || '-'}</td>
                 <td className="px-6 py-4 text-sm text-slate-500">{client.phone || '-'}</td>
                 <td className="px-6 py-4 text-sm text-slate-500">{getActiveContractsCount(client.id)}</td>
@@ -124,7 +117,7 @@ export default function CMSClientsPage() {
                 </td>
               </tr>
             ))}
-            {counterparties.length === 0 && (
+            {clients.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                   لا يوجد عملاء (No clients found)

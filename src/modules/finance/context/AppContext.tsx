@@ -12,7 +12,8 @@ import {
   writeBatch, 
   getDocs,
   Timestamp,
-  getDoc
+  getDoc,
+  runTransaction
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { db, auth } from '../../../core/firebase';
@@ -513,16 +514,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const document = state.billingDocuments.find(d => d.id === id);
       if (!document) throw new Error('Document not found');
 
-      // Generate sequential number
       const prefix = state.settings.invoicePrefix;
       const year = new Date().getFullYear();
-      // Simple sequential logic: count existing issued documents for this year + 1
-      // In a high-concurrency real app, use a distributed counter.
-      const existingCount = state.billingDocuments.filter(d => 
-        d.documentNumber?.startsWith(`${prefix}${year}`)
-      ).length;
-      const sequence = (existingCount + 1).toString().padStart(4, '0');
-      const documentNumber = `${prefix}${year}-${sequence}`;
+
+      const newSequence = await runTransaction(db, async (transaction) => {
+        const counterRef = doc(db, 'appSettings', 'invoiceCounter');
+        const counterDoc = await transaction.get(counterRef);
+        
+        let lastSequence = 0;
+        if (counterDoc.exists()) {
+          lastSequence = counterDoc.data().lastSequence || 0;
+        }
+        
+        const nextSequence = lastSequence + 1;
+        transaction.set(counterRef, { lastSequence: nextSequence }, { merge: true });
+        
+        return nextSequence;
+      });
+
+      const sequenceStr = newSequence.toString().padStart(4, '0');
+      const documentNumber = `${prefix}${year}-${sequenceStr}`;
 
       const batch = writeBatch(db);
 
@@ -536,7 +547,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       // 2. Create Transaction if linked to project
       if (document.projectId) {
         const transactionId = generateId();
-        const transaction: Transaction = {
+        const transactionObj: Transaction = {
           id: transactionId,
           date: now(),
           amount: document.total,
@@ -547,12 +558,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           category: 'Accounts Receivable',
           createdAt: now()
         };
-        batch.set(doc(db, 'transactions', transactionId), transaction);
+        batch.set(doc(db, 'transactions', transactionId), transactionObj);
       }
 
       await batch.commit();
       showNotification('success', `Document issued: ${documentNumber}`);
     } catch (error) {
+      console.error(error);
       showNotification('error', 'Failed to issue document');
     }
   };

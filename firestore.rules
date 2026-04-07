@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Finance Collections
+    match /projects/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /billingDocuments/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /payments/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /subscriptions/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /counterparties/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /products/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /legalEntities/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /budgetCategories/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /transactions/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // App Settings
+    match /appSettings/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // CMS Collections
+    match /cms_contracts/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /cms_clients/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    match /cms_templates/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Default deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

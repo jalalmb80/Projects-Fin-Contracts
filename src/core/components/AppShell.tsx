@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { usePlatform } from '../context/PlatformContext';
 import { MODULES } from '../registry';
 import ModuleSwitcher from './ModuleSwitcher';
-import LoginPage from '../../modules/finance/pages/LoginPage';
+import LoginPage from '../pages/LoginPage';
 
 export default function AppShell() {
   const { user, loadingAuth } = usePlatform();

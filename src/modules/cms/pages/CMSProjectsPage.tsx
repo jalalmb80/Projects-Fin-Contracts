@@ -1,21 +1,17 @@
 import React, { useState } from 'react';
-import { usePlatform } from '../../../core/context/PlatformContext';
 import { useContracts } from '../hooks/useContracts';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
-import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../../core/firebase';
 
 export default function CMSProjectsPage() {
-  const { projects, counterparties } = usePlatform();
-  const { contracts } = useContracts();
+  const { projects, clients, contracts, addProject, updateProject, deleteProject } = useContracts();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    name: '',
-    clientId: '',
-    contractValue: 0,
+    name_ar: '',
+    client_id: '',
+    amount_sar: 0,
     status: 'Active',
-    startDate: new Date().toISOString().split('T')[0],
+    start_date: new Date().toISOString().split('T')[0],
     description: ''
   });
 
@@ -23,21 +19,21 @@ export default function CMSProjectsPage() {
     if (project) {
       setEditingId(project.id);
       setFormData({
-        name: project.name || '',
-        clientId: project.clientId || '',
-        contractValue: project.contractValue || 0,
+        name_ar: project.name_ar || project.name || '',
+        client_id: project.client_id || project.clientId || '',
+        amount_sar: project.amount_sar || project.contractValue || 0,
         status: project.status || 'Active',
-        startDate: project.startDate || new Date().toISOString().split('T')[0],
+        start_date: project.start_date || project.startDate || new Date().toISOString().split('T')[0],
         description: project.description || ''
       });
     } else {
       setEditingId(null);
       setFormData({
-        name: '',
-        clientId: '',
-        contractValue: 0,
+        name_ar: '',
+        client_id: '',
+        amount_sar: 0,
         status: 'Active',
-        startDate: new Date().toISOString().split('T')[0],
+        start_date: new Date().toISOString().split('T')[0],
         description: ''
       });
     }
@@ -48,14 +44,13 @@ export default function CMSProjectsPage() {
     e.preventDefault();
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'projects', editingId), formData);
+        await updateProject(editingId, formData);
       } else {
-        const newId = crypto.randomUUID();
-        await setDoc(doc(db, 'projects', newId), {
+        await addProject({
           ...formData,
-          id: newId,
+          project_type: 'أخرى',
           createdAt: new Date().toISOString()
-        });
+        } as any);
       }
       setIsModalOpen(false);
     } catch (error) {
@@ -67,7 +62,7 @@ export default function CMSProjectsPage() {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this project?')) {
       try {
-        await deleteDoc(doc(db, 'projects', id));
+        await deleteProject(id);
       } catch (error) {
         console.error('Error deleting project:', error);
         alert('Failed to delete project');
@@ -76,8 +71,8 @@ export default function CMSProjectsPage() {
   };
 
   const getClientName = (clientId: string) => {
-    const client = counterparties.find(c => c.id === clientId);
-    return client ? (client.nameAr || client.name) : 'Unknown';
+    const client = clients.find(c => c.id === clientId);
+    return client ? client.name_ar : 'Unknown';
   };
 
   const getContractCount = (projectId: string) => {
@@ -112,8 +107,8 @@ export default function CMSProjectsPage() {
           <tbody className="divide-y divide-slate-100">
             {projects.map(project => (
               <tr key={project.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-slate-900">{project.name}</td>
-                <td className="px-6 py-4 text-sm text-slate-600">{getClientName(project.clientId)}</td>
+                <td className="px-6 py-4 text-sm font-medium text-slate-900">{project.name_ar || (project as any).name}</td>
+                <td className="px-6 py-4 text-sm text-slate-600">{getClientName(project.client_id || (project as any).clientId)}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
                     project.status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
@@ -123,7 +118,7 @@ export default function CMSProjectsPage() {
                     {project.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-slate-500">{project.startDate}</td>
+                <td className="px-6 py-4 text-sm text-slate-500">{project.start_date || (project as any).startDate}</td>
                 <td className="px-6 py-4 text-sm text-slate-500">{getContractCount(project.id)}</td>
                 <td className="px-6 py-4 text-left space-x-3 space-x-reverse">
                   <button onClick={() => handleOpenModal(project)} className="text-emerald-600 hover:text-emerald-700">
@@ -164,8 +159,8 @@ export default function CMSProjectsPage() {
                   <input
                     type="text"
                     required
-                    value={formData.name}
-                    onChange={e => setFormData({...formData, name: e.target.value})}
+                    value={formData.name_ar}
+                    onChange={e => setFormData({...formData, name_ar: e.target.value})}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
@@ -173,13 +168,13 @@ export default function CMSProjectsPage() {
                   <label className="text-sm font-medium text-slate-700">العميل (Client)</label>
                   <select
                     required
-                    value={formData.clientId}
-                    onChange={e => setFormData({...formData, clientId: e.target.value})}
+                    value={formData.client_id}
+                    onChange={e => setFormData({...formData, client_id: e.target.value})}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   >
                     <option value="">اختر عميلاً (Select Client)</option>
-                    {counterparties.map(c => (
-                      <option key={c.id} value={c.id}>{c.nameAr || c.name}</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>{c.name_ar}</option>
                     ))}
                   </select>
                 </div>
@@ -202,8 +197,8 @@ export default function CMSProjectsPage() {
                     type="number"
                     required
                     min="0"
-                    value={formData.contractValue}
-                    onChange={e => setFormData({...formData, contractValue: parseFloat(e.target.value) || 0})}
+                    value={formData.amount_sar}
+                    onChange={e => setFormData({...formData, amount_sar: parseFloat(e.target.value) || 0})}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
@@ -212,8 +207,8 @@ export default function CMSProjectsPage() {
                   <input
                     type="date"
                     required
-                    value={formData.startDate}
-                    onChange={e => setFormData({...formData, startDate: e.target.value})}
+                    value={formData.start_date}
+                    onChange={e => setFormData({...formData, start_date: e.target.value})}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
