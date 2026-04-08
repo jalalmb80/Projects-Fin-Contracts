@@ -289,13 +289,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const fetchOneTimeData = async () => {
       try {
         const productsSnap = await getDocs(query(collection(db, 'products'), orderBy('name')));
-        dispatch({ type: 'SET_COLLECTION', collection: 'products', payload: productsSnap.docs.map(d => d.data()) });
+        dispatch({ type: 'SET_COLLECTION', collection: 'products', payload: productsSnap.docs.map(d => ({ id: d.id, ...d.data() })) });
 
         const legalEntitiesSnap = await getDocs(query(collection(db, 'legalEntities'), orderBy('name')));
-        dispatch({ type: 'SET_COLLECTION', collection: 'legalEntities', payload: legalEntitiesSnap.docs.map(d => d.data()) });
+        dispatch({ type: 'SET_COLLECTION', collection: 'legalEntities', payload: legalEntitiesSnap.docs.map(d => ({ id: d.id, ...d.data() })) });
 
         const budgetCategoriesSnap = await getDocs(query(collection(db, 'budgetCategories'), orderBy('name')));
-        dispatch({ type: 'SET_COLLECTION', collection: 'budgetCategories', payload: budgetCategoriesSnap.docs.map(d => d.data()) });
+        dispatch({ type: 'SET_COLLECTION', collection: 'budgetCategories', payload: budgetCategoriesSnap.docs.map(d => ({ id: d.id, ...d.data() })) });
 
         const settingsDoc = await getDoc(doc(db, 'appSettings', 'config'));
         if (settingsDoc.exists()) {

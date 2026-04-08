@@ -19,10 +19,10 @@ interface SubscriptionFormProps {
 }
 
 export default function SubscriptionForm({ initialData, onSave, onCancel }: SubscriptionFormProps) {
-  const { counterparties } = useApp();
+  const { counterparties, legalEntities } = useApp();
   const [formData, setFormData] = useState<Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>>({
     name: '',
-    legalEntityId: 'default', // Placeholder
+    legalEntityId: '',
     direction: SubscriptionDirection.AR,
     counterpartyId: '',
     status: SubscriptionStatus.Draft,
@@ -41,11 +41,14 @@ export default function SubscriptionForm({ initialData, onSave, onCancel }: Subs
     if (!initialData && counterparties.length > 0 && !formData.counterpartyId) {
       setFormData(prev => ({ ...prev, counterpartyId: counterparties[0].id }));
     }
+    if (!initialData && legalEntities.length > 0 && !formData.legalEntityId) {
+      setFormData(prev => ({ ...prev, legalEntityId: legalEntities[0].id }));
+    }
     if (initialData) {
       const { id, createdAt, updatedAt, ...rest } = initialData;
       setFormData(rest);
     }
-  }, [initialData, counterparties]);
+  }, [initialData, counterparties, legalEntities]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,6 +126,23 @@ export default function SubscriptionForm({ initialData, onSave, onCancel }: Subs
                 onChange={handleChange}
                 className="form-input"
               />
+            </div>
+
+            <div>
+              <label htmlFor="legalEntityId" className="form-label">Legal Entity *</label>
+              <select
+                name="legalEntityId"
+                id="legalEntityId"
+                required
+                value={formData.legalEntityId}
+                onChange={handleChange}
+                className="form-input"
+              >
+                <option value="">Select Legal Entity</option>
+                {legalEntities.map(e => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
