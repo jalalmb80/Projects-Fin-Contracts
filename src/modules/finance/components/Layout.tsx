@@ -24,16 +24,15 @@ import {
 import { cn } from '../lib/utils';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../../core/firebase';
-import { DocumentStatus, DocumentDirection } from '../types';
+import { DocumentStatus, DocumentDirection, Currency } from '../types';
 
 export default function Layout() {
-  const { user, billingDocuments, settings, updateSettings } = useApp();
+  const { user, billingDocuments, settings, updateSettings, displayCurrency, setDisplayCurrency } = useApp();
   const { lang, setLang } = useLang();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false); // Placeholder for dark mode logic
 
   const navigation = [
     { name_en: 'Dashboard', name_ar: 'لوحة التحكم', href: '/finance/dashboard', icon: LayoutDashboard },
@@ -61,9 +60,13 @@ export default function Layout() {
   ).length;
 
   const toggleCurrency = () => {
-    // This would typically update a global preference or context state
-    // For now, we'll just log it as the requirement is to have the toggle
-    console.log("Toggle currency");
+    setDisplayCurrency(
+      displayCurrency === Currency.SAR ? Currency.USD : Currency.SAR
+    );
+  };
+
+  const toggleDarkMode = () => {
+    document.documentElement.classList.toggle('dark');
   };
 
   const isRTL = lang === 'ar';
@@ -198,15 +201,15 @@ export default function Layout() {
               onClick={toggleCurrency}
               className="px-3 py-1 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200"
             >
-              {settings.defaultCurrency}
+              {displayCurrency}
             </button>
 
             {/* Dark Mode Toggle */}
             <button 
-              onClick={() => setIsDarkMode(!isDarkMode)}
+              onClick={toggleDarkMode}
               className="p-1 text-slate-500 hover:text-slate-700"
             >
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              {document.documentElement.classList.contains('dark') ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
             {/* Notifications */}

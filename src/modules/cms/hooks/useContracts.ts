@@ -25,13 +25,33 @@ export function useContracts() {
 
     const unsubs = [
       onSnapshot(query(collection(db, 'cms_contracts'), orderBy('start_date', 'desc')),
-        snap => { setContracts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Contract))); setLoading(false); }),
+        snap => { setContracts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Contract))); setLoading(false); },
+        error => {
+          console.error('[useContracts] listener error:', error.code);
+          setLoading(false);
+        }
+      ),
       onSnapshot(query(collection(db, 'cms_clients'), orderBy('name_ar')),
-        snap => setClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as Client)))),
+        snap => setClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as Client))),
+        error => {
+          console.error('[useContracts] listener error:', error.code);
+          setLoading(false);
+        }
+      ),
       onSnapshot(query(collection(db, 'cms_templates'), orderBy('name_ar')),
-        snap => setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() } as ContractTemplate)))),
+        snap => setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() } as ContractTemplate))),
+        error => {
+          console.error('[useContracts] listener error:', error.code);
+          setLoading(false);
+        }
+      ),
       onSnapshot(query(collection(db, 'cms_projects'), orderBy('name_ar')),
-        snap => setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)))),
+        snap => setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project))),
+        error => {
+          console.error('[useContracts] listener error:', error.code);
+          setLoading(false);
+        }
+      ),
     ];
     return () => unsubs.forEach(u => u());
   }, [user]);
