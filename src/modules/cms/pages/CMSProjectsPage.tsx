@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useContracts } from '../hooks/useContracts';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import { ProjectStatus } from '../types';
@@ -22,6 +22,7 @@ export default function CMSProjectsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name_ar: '',
     client_id: '',
@@ -67,10 +68,7 @@ export default function CMSProjectsPage() {
       if (editingId) {
         await updateProject(editingId, formData);
       } else {
-        await addProject({
-          ...formData,
-          project_type: 'أخرى',
-        });
+        await addProject({ ...formData, project_type: 'أخرى' });
       }
       setIsModalOpen(false);
       showFeedback('success', editingId ? 'تم تحديث المشروع بنجاح' : 'تم إضافة المشروع بنجاح');
@@ -81,14 +79,17 @@ export default function CMSProjectsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      try {
-        await deleteProject(id);
-        showFeedback('success', 'تم حذف المشروع بنجاح');
-      } catch (error) {
-        console.error('Error deleting project:', error);
-        showFeedback('error', 'حدث خطأ أثناء حذف المشروع');
-      }
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    setConfirmDeleteId(null);
+    try {
+      await deleteProject(id);
+      showFeedback('success', 'تم حذف المشروع بنجاح');
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      showFeedback('error', 'حدث خطأ أثناء حذف المشروع');
     }
   };
 
@@ -154,8 +155,12 @@ export default function CMSProjectsPage() {
                   <button onClick={() => handleOpenModal(project)} className="text-emerald-600 hover:text-emerald-700">
                     <Edit2 size={18} />
                   </button>
-                  <button onClick={() => handleDelete(project.id)} className="text-red-500 hover:text-red-600">
-                    <Trash2 size={18} />
+                  <button
+                    onClick={() => handleDelete(project.id)}
+                    className={`transition-colors ${confirmDeleteId === project.id ? 'text-red-700 font-medium text-xs' : 'text-red-400 hover:text-red-600'}`}
+                    title={confirmDeleteId === project.id ? 'اضغط مرة أخرى للتأكيد' : 'حذف'}
+                  >
+                    {confirmDeleteId === project.id ? 'تأكيد الحذف' : <Trash2 size={18} />}
                   </button>
                 </td>
               </tr>
@@ -186,22 +191,15 @@ export default function CMSProjectsPage() {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="space-y-2 col-span-2">
                   <label className="text-sm font-medium text-slate-700">اسم المشروع (Project Name)</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name_ar}
+                  <input type="text" required value={formData.name_ar}
                     onChange={e => setFormData({ ...formData, name_ar: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">العميل (Client)</label>
-                  <select
-                    required
-                    value={formData.client_id}
+                  <select required value={formData.client_id}
                     onChange={e => setFormData({ ...formData, client_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  >
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
                     <option value="">اختر عميلاً (Select Client)</option>
                     {clients.map(c => (
                       <option key={c.id} value={c.id}>{c.name_ar}</option>
@@ -210,12 +208,9 @@ export default function CMSProjectsPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">الحالة (Status)</label>
-                  <select
-                    required
-                    value={formData.status}
+                  <select required value={formData.status}
                     onChange={e => setFormData({ ...formData, status: e.target.value as ProjectStatus })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  >
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
                     {PROJECT_STATUSES.map(s => (
                       <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                     ))}
@@ -223,47 +218,30 @@ export default function CMSProjectsPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">قيمة العقد (Contract Value)</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={formData.amount_sar}
+                  <input type="number" required min="0" value={formData.amount_sar}
                     onChange={e => setFormData({ ...formData, amount_sar: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">تاريخ البدء (Start Date)</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.start_date}
+                  <input type="date" required value={formData.start_date}
                     onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
                 </div>
                 <div className="space-y-2 col-span-2">
                   <label className="text-sm font-medium text-slate-700">الوصف (Description)</label>
-                  <textarea
-                    rows={3}
-                    value={formData.description}
+                  <textarea rows={3} value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
                 </div>
               </div>
               <div className="flex justify-end space-x-3 space-x-reverse pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
-                >
+                <button type="button" onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">
                   إلغاء (Cancel)
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
-                >
+                <button type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors">
                   حفظ (Save)
                 </button>
               </div>
