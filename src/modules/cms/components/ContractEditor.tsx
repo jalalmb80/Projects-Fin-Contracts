@@ -1748,7 +1748,8 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
                 </div>
               )}
             </div>
-          )});
+            );
+          })}
 
           <div className="mt-24 grid grid-cols-2 gap-12 text-center text-lg signature-block">
             <div>
