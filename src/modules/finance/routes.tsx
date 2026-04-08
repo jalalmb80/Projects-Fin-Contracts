@@ -21,8 +21,8 @@ import { ToastProvider } from './components/ui/Toast';
 export default function FinanceRoutes() {
   return (
     <LanguageProvider>
-      <AppProvider>
-        <ToastProvider>
+      <ToastProvider>
+        <AppProvider>
           <Routes>
             <Route element={<Layout />}>
               <Route index element={<Navigate to="dashboard" replace />} />
@@ -47,8 +47,8 @@ export default function FinanceRoutes() {
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>
-        </ToastProvider>
-      </AppProvider>
+        </AppProvider>
+      </ToastProvider>
     </LanguageProvider>
   );
 }

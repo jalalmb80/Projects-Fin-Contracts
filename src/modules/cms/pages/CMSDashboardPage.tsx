@@ -1,14 +1,12 @@
 import React from 'react';
 import { useContracts } from '../hooks/useContracts';
-import { usePlatform } from '../../../core/context/PlatformContext';
 import { FileText, Clock, CheckCircle, AlertCircle, Plus, Users, ArrowLeft } from 'lucide-react';
 import { useLang, t } from '../context/LanguageContext';
 import { toHijri } from '../utils/hijriDate';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function CMSDashboardPage() {
-  const { contracts } = useContracts();
-  const { counterparties } = usePlatform();
+  const { contracts, clients } = useContracts();
   const { lang } = useLang();
   const navigate = useNavigate();
 
@@ -53,8 +51,8 @@ export default function CMSDashboardPage() {
   };
 
   const getClientName = (clientId: string) => {
-    const client = counterparties.find(c => c.id === clientId);
-    return client ? (client.nameAr || client.name) : 'Unknown';
+    const client = clients.find(c => c.id === clientId);
+    return client ? ((client as any).nameAr || (client as any).name_ar || (client as any).name) : 'Unknown';
   };
 
   return (

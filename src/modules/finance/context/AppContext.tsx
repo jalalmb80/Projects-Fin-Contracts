@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import { useToast } from '../components/ui/Toast';
 import { 
   collection, 
   onSnapshot, 
@@ -223,6 +224,7 @@ export const useApp = () => {
 // --- Provider ---
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
+  const { addToast } = useToast();
   const [state, dispatch] = useReducer(appReducer, initialState);
 
   // Auth Listener
@@ -332,9 +334,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'projects', id), { ...project, id, createdAt: now(), updatedAt: now() });
-      console.log('[AppContext]', 'success', 'Project created successfully');
+      addToast('success', 'Project created successfully');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to create project');
+      addToast('error', 'Failed to create project');
       throw error;
     }
   };
@@ -342,9 +344,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const updateProject = async (id: string, data: Partial<Project>) => {
     try {
       await updateDoc(doc(db, 'projects', id), { ...data, updatedAt: now() });
-      console.log('[AppContext]', 'success', 'Project updated successfully');
+      addToast('success', 'Project updated successfully');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to update project');
+      addToast('error', 'Failed to update project');
       throw error;
     }
   };
@@ -352,9 +354,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteProject = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'projects', id));
-      console.log('[AppContext]', 'success', 'Project deleted successfully');
+      addToast('success', 'Project deleted successfully');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to delete project');
+      addToast('error', 'Failed to delete project');
       throw error;
     }
   };
@@ -371,9 +373,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         milestones: updatedMilestones,
         updatedAt: now()
       });
-      console.log('[AppContext]', 'success', 'Milestone added');
+      addToast('success', 'Milestone added');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to add milestone');
+      addToast('error', 'Failed to add milestone');
     }
   };
 
@@ -390,9 +392,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         milestones: updatedMilestones,
         updatedAt: now()
       });
-      console.log('[AppContext]', 'success', 'Milestone updated');
+      addToast('success', 'Milestone updated');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to update milestone');
+      addToast('error', 'Failed to update milestone');
     }
   };
 
@@ -407,9 +409,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         milestones: updatedMilestones,
         updatedAt: now()
       });
-      console.log('[AppContext]', 'success', 'Milestone deleted');
+      addToast('success', 'Milestone deleted');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to delete milestone');
+      addToast('error', 'Failed to delete milestone');
     }
   };
 
@@ -471,10 +473,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
 
       await batch.commit();
-      console.log('[AppContext]', 'success', 'Milestone completed — invoice draft created');
+      addToast('success', 'Milestone completed — invoice draft created');
     } catch (error) {
       console.error(error);
-      console.log('[AppContext]', 'error', 'Failed to complete milestone');
+      addToast('error', 'Failed to complete milestone');
     }
   };
 
@@ -483,18 +485,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'billingDocuments', id), { ...docData, id, createdAt: now(), updatedAt: now() });
-      console.log('[AppContext]', 'success', 'Document created');
+      addToast('success', 'Document created');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to create document');
+      addToast('error', 'Failed to create document');
     }
   };
 
   const updateBillingDocument = async (id: string, data: Partial<BillingDocument>) => {
     try {
       await updateDoc(doc(db, 'billingDocuments', id), { ...data, updatedAt: now() });
-      console.log('[AppContext]', 'success', 'Document updated');
+      addToast('success', 'Document updated');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to update document');
+      addToast('error', 'Failed to update document');
     }
   };
 
@@ -551,10 +553,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await batch.commit();
-      console.log('[AppContext]', 'success', `Document issued: ${documentNumber}`);
+      addToast('success', `Document issued: ${documentNumber}`);
     } catch (error) {
       console.error(error);
-      console.log('[AppContext]', 'error', 'Failed to issue document');
+      addToast('error', 'Failed to issue document');
     }
   };
 
@@ -569,9 +571,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'payments', id), { ...payment, id, createdAt: now() });
-      console.log('[AppContext]', 'success', 'Payment recorded');
+      addToast('success', 'Payment recorded');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to record payment');
+      addToast('error', 'Failed to record payment');
     }
   };
 
@@ -621,10 +623,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       });
 
       await batch.commit();
-      console.log('[AppContext]', 'success', 'Payment allocated');
+      addToast('success', 'Payment allocated');
     } catch (error) {
       console.error(error);
-      console.log('[AppContext]', 'error', 'Failed to allocate payment');
+      addToast('error', 'Failed to allocate payment');
     }
   };
 
@@ -633,27 +635,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'subscriptions', id), { ...sub, id, createdAt: now(), updatedAt: now() });
-      console.log('[AppContext]', 'success', 'Subscription created');
+      addToast('success', 'Subscription created');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to create subscription');
+      addToast('error', 'Failed to create subscription');
     }
   };
 
   const updateSubscription = async (id: string, data: Partial<Subscription>) => {
     try {
       await updateDoc(doc(db, 'subscriptions', id), { ...data, updatedAt: now() });
-      console.log('[AppContext]', 'success', 'Subscription updated');
+      addToast('success', 'Subscription updated');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to update subscription');
+      addToast('error', 'Failed to update subscription');
     }
   };
 
   const deleteSubscription = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'subscriptions', id));
-      console.log('[AppContext]', 'success', 'Subscription deleted');
+      addToast('success', 'Subscription deleted');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to delete subscription');
+      addToast('error', 'Failed to delete subscription');
     }
   };
 
@@ -665,7 +667,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       );
 
       if (dueSubscriptions.length === 0) {
-        console.log('[AppContext]', 'success', 'No subscriptions due for billing');
+        addToast('success', 'No subscriptions due for billing');
         return;
       }
 
@@ -731,10 +733,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await batch.commit();
-      console.log('[AppContext]', 'success', `Billing job completed. Generated ${count} invoices.`);
+      addToast('success', `Billing job completed. Generated ${count} invoices.`);
     } catch (error) {
       console.error(error);
-      console.log('[AppContext]', 'error', 'Billing job failed');
+      addToast('error', 'Billing job failed');
     }
   };
 
@@ -743,27 +745,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'counterparties', id), { ...cp, id, createdAt: now() });
-      console.log('[AppContext]', 'success', 'Counterparty added');
+      addToast('success', 'Counterparty added');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to add counterparty');
+      addToast('error', 'Failed to add counterparty');
     }
   };
 
   const updateCounterparty = async (id: string, data: Partial<Counterparty>) => {
     try {
       await updateDoc(doc(db, 'counterparties', id), data);
-      console.log('[AppContext]', 'success', 'Counterparty updated');
+      addToast('success', 'Counterparty updated');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to update counterparty');
+      addToast('error', 'Failed to update counterparty');
     }
   };
 
   const deleteCounterparty = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'counterparties', id));
-      console.log('[AppContext]', 'success', 'Counterparty deleted');
+      addToast('success', 'Counterparty deleted');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to delete counterparty');
+      addToast('error', 'Failed to delete counterparty');
     }
   };
 
@@ -774,10 +776,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'ADD_ITEM', collection: 'products', payload: newProduct });
     try {
       await setDoc(doc(db, 'products', id), newProduct);
-      console.log('[AppContext]', 'success', 'Product added');
+      addToast('success', 'Product added');
     } catch (error) {
       dispatch({ type: 'DELETE_ITEM', collection: 'products', id }); // Rollback
-      console.log('[AppContext]', 'error', 'Failed to add product');
+      addToast('error', 'Failed to add product');
     }
   };
 
@@ -786,10 +788,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: { id, ...data } });
     try {
       await updateDoc(doc(db, 'products', id), data);
-      console.log('[AppContext]', 'success', 'Product updated');
+      addToast('success', 'Product updated');
     } catch (error) {
       if (original) dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: original }); // Rollback
-      console.log('[AppContext]', 'error', 'Failed to update product');
+      addToast('error', 'Failed to update product');
     }
   };
 
@@ -800,27 +802,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'legalEntities', id), { ...entity, id });
-      console.log('[AppContext]', 'success', 'Legal entity added');
+      addToast('success', 'Legal entity added');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to add legal entity');
+      addToast('error', 'Failed to add legal entity');
     }
   };
 
   const updateLegalEntity = async (id: string, data: Partial<LegalEntity>) => {
     try {
       await updateDoc(doc(db, 'legalEntities', id), data);
-      console.log('[AppContext]', 'success', 'Legal entity updated');
+      addToast('success', 'Legal entity updated');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to update legal entity');
+      addToast('error', 'Failed to update legal entity');
     }
   };
 
   const deleteLegalEntity = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'legalEntities', id));
-      console.log('[AppContext]', 'success', 'Legal entity deleted');
+      addToast('success', 'Legal entity deleted');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to delete legal entity');
+      addToast('error', 'Failed to delete legal entity');
     }
   };
 
@@ -829,27 +831,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'budgetCategories', id), { ...category, id });
-      console.log('[AppContext]', 'success', 'Budget category added');
+      addToast('success', 'Budget category added');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to add budget category');
+      addToast('error', 'Failed to add budget category');
     }
   };
 
   const updateBudgetCategory = async (id: string, data: Partial<BudgetCategory>) => {
     try {
       await updateDoc(doc(db, 'budgetCategories', id), data);
-      console.log('[AppContext]', 'success', 'Budget category updated');
+      addToast('success', 'Budget category updated');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to update budget category');
+      addToast('error', 'Failed to update budget category');
     }
   };
 
   const deleteBudgetCategory = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'budgetCategories', id));
-      console.log('[AppContext]', 'success', 'Budget category deleted');
+      addToast('success', 'Budget category deleted');
     } catch (error) {
-      console.log('[AppContext]', 'error', 'Failed to delete budget category');
+      addToast('error', 'Failed to delete budget category');
     }
   };
 
@@ -860,10 +862,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_SETTINGS', payload: newSettings });
     try {
       await updateDoc(doc(db, 'appSettings', 'config'), settings);
-      console.log('[AppContext]', 'success', 'Settings updated');
+      addToast('success', 'Settings updated');
     } catch (error) {
       dispatch({ type: 'SET_SETTINGS', payload: original });
-      console.log('[AppContext]', 'error', 'Failed to update settings');
+      addToast('error', 'Failed to update settings');
     }
   };
 
