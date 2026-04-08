@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { useToast } from '../components/ui/Toast';
 import { 
   DocumentStatus, 
   DocumentDirection, 
@@ -25,6 +26,7 @@ import {
 export default function BillingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const { 
     billingDocuments, 
     counterparties, 
@@ -72,7 +74,6 @@ export default function BillingDetailPage() {
   const fromEntity = legalEntities.find(e => e.id === document.fromEntityId);
   const toEntity = legalEntities.find(e => e.id === document.toEntityId);
 
-  // Filter payments related to this document
   const relatedPayments = payments.flatMap(p => 
     p.allocations
       .filter(a => a.invoiceId === document.id)
@@ -109,12 +110,11 @@ export default function BillingDetailPage() {
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentAmount <= 0 || paymentAmount > document.balance) {
-      alert('Invalid payment amount');
+      addToast('error', 'Invalid payment amount');
       return;
     }
 
     try {
-      // 1. Record Payment
       await recordPayment({
         date: paymentDate,
         amount: paymentAmount,
@@ -123,11 +123,10 @@ export default function BillingDetailPage() {
         direction: document.direction === DocumentDirection.AR ? PaymentDirection.IN : PaymentDirection.OUT,
         method: paymentMethod,
         reference: paymentReference,
-        allocations: [], // In a full implementation, we'd create the allocation object here
-        unallocatedAmount: 0 // Fully allocated to this invoice for simplicity
+        allocations: [],
+        unallocatedAmount: 0
       });
 
-      // 2. Update Invoice Balance (Simplified: normally handled by backend trigger or explicit allocate function)
       const newPaidAmount = document.paidAmount + paymentAmount;
       const newBalance = document.total - newPaidAmount;
       const newStatus = newBalance <= 0 ? DocumentStatus.Paid : DocumentStatus.PartiallyPaid;
@@ -140,7 +139,7 @@ export default function BillingDetailPage() {
 
       setIsPaymentModalOpen(false);
     } catch (error) {
-      console.error("Payment failed", error);
+      console.error('Payment failed', error);
     }
   };
 
@@ -168,9 +167,8 @@ export default function BillingDetailPage() {
               </p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
-            {/* Action Buttons based on Status */}
             {document.status === DocumentStatus.Draft && (
               <>
                 <button onClick={() => submitForApproval(document.id)} className="btn-secondary text-sm px-3 py-2 border rounded hover:bg-gray-50">
@@ -181,7 +179,6 @@ export default function BillingDetailPage() {
                 </button>
               </>
             )}
-
             {document.status === DocumentStatus.PendingApproval && (
               <>
                 <button onClick={() => approveDocument(document.id)} className="bg-green-600 text-white text-sm px-3 py-2 rounded hover:bg-green-700 flex items-center">
@@ -192,20 +189,15 @@ export default function BillingDetailPage() {
                 </button>
               </>
             )}
-
             {document.status === DocumentStatus.Approved && (
               <button onClick={() => issueDocument(document.id)} className="bg-primary-600 text-white text-sm px-3 py-2 rounded hover:bg-primary-700 flex items-center">
                 <FileText className="h-4 w-4 mr-1" /> Issue Document
               </button>
             )}
-
             {(document.status === DocumentStatus.Issued || document.status === DocumentStatus.Sent || document.status === DocumentStatus.PartiallyPaid || document.status === DocumentStatus.Overdue) && (
               <>
-                <button 
-                  onClick={() => {
-                    setPaymentAmount(document.balance);
-                    setIsPaymentModalOpen(true);
-                  }} 
+                <button
+                  onClick={() => { setPaymentAmount(document.balance); setIsPaymentModalOpen(true); }}
                   className="bg-green-600 text-white text-sm px-3 py-2 rounded hover:bg-green-700 flex items-center"
                 >
                   <CreditCard className="h-4 w-4 mr-1" /> Record Payment
@@ -225,9 +217,7 @@ export default function BillingDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Document Details */}
           <div className="bg-white shadow rounded-lg overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-200">
               <h3 className="text-lg font-medium leading-6 text-gray-900">Line Items</h3>
@@ -259,30 +249,24 @@ export default function BillingDetailPage() {
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
               <div className="flex flex-col items-end space-y-2">
                 <div className="flex justify-between w-64 text-sm text-gray-600">
-                  <span>Subtotal:</span>
-                  <span>{formatCurrency(document.subtotal)}</span>
+                  <span>Subtotal:</span><span>{formatCurrency(document.subtotal)}</span>
                 </div>
                 <div className="flex justify-between w-64 text-sm text-gray-600">
-                  <span>Tax Total:</span>
-                  <span>{formatCurrency(document.taxTotal)}</span>
+                  <span>Tax Total:</span><span>{formatCurrency(document.taxTotal)}</span>
                 </div>
                 <div className="flex justify-between w-64 text-base font-bold text-gray-900 border-t border-gray-300 pt-2">
-                  <span>Total:</span>
-                  <span>{formatCurrency(document.total)}</span>
+                  <span>Total:</span><span>{formatCurrency(document.total)}</span>
                 </div>
                 <div className="flex justify-between w-64 text-sm text-green-600">
-                  <span>Paid to Date:</span>
-                  <span>{formatCurrency(document.paidAmount)}</span>
+                  <span>Paid to Date:</span><span>{formatCurrency(document.paidAmount)}</span>
                 </div>
                 <div className="flex justify-between w-64 text-base font-bold text-indigo-600 border-t border-gray-300 pt-2">
-                  <span>Balance Due:</span>
-                  <span>{formatCurrency(document.balance)}</span>
+                  <span>Balance Due:</span><span>{formatCurrency(document.balance)}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Payment History */}
           {relatedPayments.length > 0 && (
             <div className="bg-white shadow rounded-lg overflow-hidden">
               <div className="px-6 py-5 border-b border-gray-200">
@@ -301,18 +285,10 @@ export default function BillingDetailPage() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {relatedPayments.map((payment, index) => (
                       <tr key={`${payment.paymentId}-${index}`}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(payment.date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {payment.method}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {payment.reference || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">
-                          {formatCurrency(payment.amount)}
-                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{new Date(payment.date).toLocaleDateString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment.method}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment.reference || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">{formatCurrency(payment.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -322,9 +298,7 @@ export default function BillingDetailPage() {
           )}
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
-          {/* Counterparty Card */}
           <div className="bg-white shadow rounded-lg p-6">
             <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
               {document.direction === DocumentDirection.AR ? 'Bill To' : 'Bill From'}
@@ -354,7 +328,6 @@ export default function BillingDetailPage() {
             </div>
           </div>
 
-          {/* Notes */}
           {document.notes && (
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Notes</h3>
@@ -364,7 +337,6 @@ export default function BillingDetailPage() {
         </div>
       </div>
 
-      {/* Payment Modal */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
@@ -377,10 +349,7 @@ export default function BillingDetailPage() {
                     <span className="text-gray-500 sm:text-sm">$</span>
                   </div>
                   <input
-                    type="number"
-                    step="0.01"
-                    required
-                    max={document.balance}
+                    type="number" step="0.01" required max={document.balance}
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(parseFloat(e.target.value))}
                     className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
@@ -390,22 +359,16 @@ export default function BillingDetailPage() {
                   </div>
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
-                <input
-                  type="date"
-                  required
-                  value={paymentDate}
+                <input type="date" required value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700">Method</label>
-                <select
-                  value={paymentMethod}
+                <select value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 >
@@ -414,29 +377,20 @@ export default function BillingDetailPage() {
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700">Reference / Check #</label>
-                <input
-                  type="text"
-                  value={paymentReference}
+                <input type="text" value={paymentReference}
                   onChange={(e) => setPaymentReference(e.target.value)}
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 />
               </div>
-
               <div className="mt-5 sm:mt-6 flex space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsPaymentModalOpen(false)}
-                  className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:text-sm"
-                >
+                <button type="button" onClick={() => setIsPaymentModalOpen(false)}
+                  className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:text-sm">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none sm:text-sm"
-                >
+                <button type="submit"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none sm:text-sm">
                   Record Payment
                 </button>
               </div>

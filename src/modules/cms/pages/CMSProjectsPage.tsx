@@ -1,19 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContracts } from '../hooks/useContracts';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
+import { ProjectStatus } from '../types';
+
+const PROJECT_STATUSES: ProjectStatus[] = ['مخطط', 'قيد التنفيذ', 'مكتمل', 'معلّق'];
+const STATUS_LABELS: Record<ProjectStatus, string> = {
+  'مخطط': 'مخطط (Planned)',
+  'قيد التنفيذ': 'قيد التنفيذ (In Progress)',
+  'مكتمل': 'مكتمل (Completed)',
+  'معلّق': 'معلّق (On Hold)',
+};
+const STATUS_COLORS: Record<ProjectStatus, string> = {
+  'مخطط': 'bg-blue-100 text-blue-700',
+  'قيد التنفيذ': 'bg-emerald-100 text-emerald-700',
+  'مكتمل': 'bg-slate-100 text-slate-700',
+  'معلّق': 'bg-amber-100 text-amber-700',
+};
 
 export default function CMSProjectsPage() {
   const { projects, clients, contracts, addProject, updateProject, deleteProject } = useContracts();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [formData, setFormData] = useState({
     name_ar: '',
     client_id: '',
     amount_sar: 0,
-    status: 'Active',
+    status: 'مخطط' as ProjectStatus,
     start_date: new Date().toISOString().split('T')[0],
     description: ''
   });
+
+  const showFeedback = (type: 'success' | 'error', msg: string) => {
+    setFeedback({ type, msg });
+    setTimeout(() => setFeedback(null), 4000);
+  };
 
   const handleOpenModal = (project?: any) => {
     if (project) {
@@ -22,7 +43,7 @@ export default function CMSProjectsPage() {
         name_ar: project.name_ar || project.name || '',
         client_id: project.client_id || project.clientId || '',
         amount_sar: project.amount_sar || project.contractValue || 0,
-        status: project.status || 'Active',
+        status: (project.status as ProjectStatus) || 'مخطط',
         start_date: project.start_date || project.startDate || new Date().toISOString().split('T')[0],
         description: project.description || ''
       });
@@ -32,7 +53,7 @@ export default function CMSProjectsPage() {
         name_ar: '',
         client_id: '',
         amount_sar: 0,
-        status: 'Active',
+        status: 'مخطط',
         start_date: new Date().toISOString().split('T')[0],
         description: ''
       });
@@ -49,13 +70,13 @@ export default function CMSProjectsPage() {
         await addProject({
           ...formData,
           project_type: 'أخرى',
-          createdAt: new Date().toISOString()
-        } as any);
+        });
       }
       setIsModalOpen(false);
+      showFeedback('success', editingId ? 'تم تحديث المشروع بنجاح' : 'تم إضافة المشروع بنجاح');
     } catch (error) {
       console.error('Error saving project:', error);
-      alert('Failed to save project');
+      showFeedback('error', 'حدث خطأ أثناء حفظ المشروع');
     }
   };
 
@@ -63,9 +84,10 @@ export default function CMSProjectsPage() {
     if (window.confirm('Are you sure you want to delete this project?')) {
       try {
         await deleteProject(id);
+        showFeedback('success', 'تم حذف المشروع بنجاح');
       } catch (error) {
         console.error('Error deleting project:', error);
-        alert('Failed to delete project');
+        showFeedback('error', 'حدث خطأ أثناء حذف المشروع');
       }
     }
   };
@@ -81,16 +103,26 @@ export default function CMSProjectsPage() {
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-slate-800">المشاريع (Projects)</h1>
-        <button 
-          onClick={() => handleOpenModal()} 
+        <button
+          onClick={() => handleOpenModal()}
           className="flex items-center space-x-2 space-x-reverse bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
         >
           <Plus size={18} />
           <span>إضافة مشروع (Add Project)</span>
         </button>
       </div>
+
+      {feedback && (
+        <div className={`px-4 py-2 rounded-lg text-sm mb-4 ${
+          feedback.type === 'success'
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            : 'bg-red-50 text-red-700 border border-red-200'
+        }`}>
+          {feedback.msg}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-right">
@@ -107,18 +139,16 @@ export default function CMSProjectsPage() {
           <tbody className="divide-y divide-slate-100">
             {projects.map(project => (
               <tr key={project.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-slate-900">{project.name_ar || (project as any).name}</td>
-                <td className="px-6 py-4 text-sm text-slate-600">{getClientName(project.client_id || (project as any).clientId)}</td>
+                <td className="px-6 py-4 text-sm font-medium text-slate-900">{project.name_ar}</td>
+                <td className="px-6 py-4 text-sm text-slate-600">{getClientName(project.client_id)}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                    project.status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
-                    project.status === 'Completed' ? 'bg-slate-100 text-slate-700' :
-                    'bg-amber-100 text-amber-700'
+                    STATUS_COLORS[project.status as ProjectStatus] || 'bg-slate-100 text-slate-700'
                   }`}>
                     {project.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-slate-500">{project.start_date || (project as any).startDate}</td>
+                <td className="px-6 py-4 text-sm text-slate-500">{project.start_date}</td>
                 <td className="px-6 py-4 text-sm text-slate-500">{getContractCount(project.id)}</td>
                 <td className="px-6 py-4 text-left space-x-3 space-x-reverse">
                   <button onClick={() => handleOpenModal(project)} className="text-emerald-600 hover:text-emerald-700">
@@ -160,7 +190,7 @@ export default function CMSProjectsPage() {
                     type="text"
                     required
                     value={formData.name_ar}
-                    onChange={e => setFormData({...formData, name_ar: e.target.value})}
+                    onChange={e => setFormData({ ...formData, name_ar: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
@@ -169,7 +199,7 @@ export default function CMSProjectsPage() {
                   <select
                     required
                     value={formData.client_id}
-                    onChange={e => setFormData({...formData, client_id: e.target.value})}
+                    onChange={e => setFormData({ ...formData, client_id: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   >
                     <option value="">اختر عميلاً (Select Client)</option>
@@ -183,12 +213,12 @@ export default function CMSProjectsPage() {
                   <select
                     required
                     value={formData.status}
-                    onChange={e => setFormData({...formData, status: e.target.value})}
+                    onChange={e => setFormData({ ...formData, status: e.target.value as ProjectStatus })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   >
-                    <option value="Active">نشط (Active)</option>
-                    <option value="Completed">مكتمل (Completed)</option>
-                    <option value="On Hold">معلق (On Hold)</option>
+                    {PROJECT_STATUSES.map(s => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -198,7 +228,7 @@ export default function CMSProjectsPage() {
                     required
                     min="0"
                     value={formData.amount_sar}
-                    onChange={e => setFormData({...formData, amount_sar: parseFloat(e.target.value) || 0})}
+                    onChange={e => setFormData({ ...formData, amount_sar: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
@@ -208,7 +238,7 @@ export default function CMSProjectsPage() {
                     type="date"
                     required
                     value={formData.start_date}
-                    onChange={e => setFormData({...formData, start_date: e.target.value})}
+                    onChange={e => setFormData({ ...formData, start_date: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
@@ -217,7 +247,7 @@ export default function CMSProjectsPage() {
                   <textarea
                     rows={3}
                     value={formData.description}
-                    onChange={e => setFormData({...formData, description: e.target.value})}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
