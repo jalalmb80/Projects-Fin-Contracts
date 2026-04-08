@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Contract } from '../types';
-import { Plus, Search, FileText, Edit2, Trash2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Plus, Search, FileText, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import { useLang, t } from '../context/LanguageContext';
 import { useContracts } from '../hooks/useContracts';
 
@@ -9,6 +9,7 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
   const { deleteContract } = useContracts();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const filteredContracts = contracts.filter((c: Contract) => {
     const matchesSearch = c.title_ar.includes(searchTerm) || c.contract_number?.includes(searchTerm);
@@ -28,34 +29,50 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا العقد؟ (Are you sure you want to delete this contract?)')) {
-      await deleteContract(id);
-    }
+  const handleDeleteConfirm = async () => {
+    if (!confirmDeleteId) return;
+    await deleteContract(confirmDeleteId);
+    setConfirmDeleteId(null);
   };
 
   const getClientName = (clientId: string) => {
     const client = clients.find((c: any) => c.id === clientId);
-    return client ? (client.nameAr || client.name) : 'Unknown';
+    return client ? (client.name_ar || client.nameAr || client.name || '—') : '—';
   };
+
+  const confirmTarget = confirmDeleteId
+    ? contracts.find((c: Contract) => c.id === confirmDeleteId)
+    : null;
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
+      {confirmDeleteId && (
+        <div className="flex items-center gap-4 bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-800" dir="rtl">
+          <AlertCircle size={18} className="shrink-0 text-red-600" />
+          <span className="flex-1">
+            هل تريد حذف العقد <strong>{confirmTarget?.contract_number}</strong> — {confirmTarget?.title_ar}؟ لا يمكن التراجع عن هذا الإجراء.
+          </span>
+          <button onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">
+            حذف
+          </button>
+          <button onClick={() => setConfirmDeleteId(null)} className="text-red-600 hover:text-red-700 px-3 py-1.5 rounded-lg font-medium transition-colors">
+            إلغاء
+          </button>
+        </div>
+      )}
+
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">{t('إدارة العقود', 'Contract Management', lang)}</h1>
           <p className="text-slate-500 mt-1">{t('إدارة وتتبع جميع العقود', 'Manage and track all contracts', lang)}</p>
         </div>
-        <button
-          onClick={onCreate}
-          className="flex items-center space-x-2 space-x-reverse bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-        >
+        <button onClick={onCreate} className="flex items-center space-x-2 space-x-reverse bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
           <Plus size={18} />
           <span>{t('عقد جديد', 'New Contract', lang)}</span>
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
+      <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1 relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input
@@ -66,11 +83,7 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
             className="w-full pl-4 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white min-w-[200px]"
-        >
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white min-w-[200px]">
           <option value="all">{t('جميع الحالات', 'All Statuses', lang)}</option>
           <option value="مسودة">{t('مسودة', 'Draft', lang)}</option>
           <option value="قيد المراجعة">{t('قيد المراجعة', 'In Review', lang)}</option>
@@ -100,21 +113,22 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredContracts.map((c: Contract) => (
-                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={c.id} className={`hover:bg-slate-50 transition-colors ${confirmDeleteId === c.id ? 'bg-red-50' : ''}`}>
                   <td className="px-6 py-4 text-sm font-medium text-slate-900">{c.contract_number || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-900">{c.title_ar}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{getClientName(c.client_id)}</td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(c.status)}`}>
-                      {c.status}
-                    </span>
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(c.status)}`}>{c.status}</span>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-500">{c.start_date || '-'}</td>
                   <td className="px-6 py-4 text-left space-x-3 space-x-reverse">
                     <button onClick={() => onEdit(c.id)} className="text-emerald-600 hover:text-emerald-700">
                       <Edit2 size={18} />
                     </button>
-                    <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:text-red-600">
+                    <button
+                      onClick={() => setConfirmDeleteId(confirmDeleteId === c.id ? null : c.id)}
+                      className={`transition-colors ${confirmDeleteId === c.id ? 'text-red-700' : 'text-red-400 hover:text-red-600'}`}
+                    >
                       <Trash2 size={18} />
                     </button>
                   </td>
