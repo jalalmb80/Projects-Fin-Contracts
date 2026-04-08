@@ -52,6 +52,9 @@ service cloud.firestore {
     match /cms_templates/{document=**} {
       allow read, write: if isAuthenticated();
     }
+    match /cms_projects/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
 
     // Default deny everything else
     match /{document=**} {

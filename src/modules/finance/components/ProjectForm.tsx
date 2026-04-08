@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Project, ProjectStatus, ContractType, Currency, Counterparty, WBSItem, Milestone, MilestoneStatus } from '../types';
+import { Project, ProjectStatus, ContractType, Currency, WBSItem, Milestone, MilestoneStatus } from '../types';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { counterpartyService } from '../services/counterpartyService';
+import { useApp } from '../context/AppContext';
 
 interface ProjectFormProps {
   initialData?: Project;
@@ -10,6 +10,7 @@ interface ProjectFormProps {
 }
 
 export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFormProps) {
+  const { counterparties } = useApp();
   const [formData, setFormData] = useState<Omit<Project, 'id' | 'createdAt' | 'updatedAt'>>({
     name: '',
     description: '',
@@ -22,25 +23,18 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
     wbs: [],
     milestones: []
   });
-  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'wbs' | 'milestones'>('details');
 
   useEffect(() => {
-    loadCounterparties();
+    if (!initialData && counterparties.length > 0 && !formData.clientId) {
+      setFormData(prev => ({ ...prev, clientId: counterparties[0].id }));
+    }
     if (initialData) {
       const { id, createdAt, updatedAt, ...rest } = initialData;
       setFormData(rest);
     }
-  }, [initialData]);
-
-  const loadCounterparties = async () => {
-    const data = await counterpartyService.getAll();
-    setCounterparties(data);
-    if (!initialData && data.length > 0) {
-      setFormData(prev => ({ ...prev, clientId: data[0].id }));
-    }
-  };
+  }, [initialData, counterparties]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

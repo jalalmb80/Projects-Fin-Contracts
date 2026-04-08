@@ -6,12 +6,11 @@ import {
   BillingCycle, 
   InvoiceTiming, 
   Currency, 
-  Counterparty, 
   SubscriptionItem,
   TaxProfile
 } from '../types';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { counterpartyService } from '../services/counterpartyService';
+import { useApp } from '../context/AppContext';
 
 interface SubscriptionFormProps {
   initialData?: Subscription;
@@ -20,6 +19,7 @@ interface SubscriptionFormProps {
 }
 
 export default function SubscriptionForm({ initialData, onSave, onCancel }: SubscriptionFormProps) {
+  const { counterparties } = useApp();
   const [formData, setFormData] = useState<Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>>({
     name: '',
     legalEntityId: 'default', // Placeholder
@@ -35,24 +35,17 @@ export default function SubscriptionForm({ initialData, onSave, onCancel }: Subs
     nextInvoiceDate: new Date().toISOString().split('T')[0],
     items: []
   });
-  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadCounterparties();
+    if (!initialData && counterparties.length > 0 && !formData.counterpartyId) {
+      setFormData(prev => ({ ...prev, counterpartyId: counterparties[0].id }));
+    }
     if (initialData) {
       const { id, createdAt, updatedAt, ...rest } = initialData;
       setFormData(rest);
     }
-  }, [initialData]);
-
-  const loadCounterparties = async () => {
-    const data = await counterpartyService.getAll();
-    setCounterparties(data);
-    if (!initialData && data.length > 0) {
-      setFormData(prev => ({ ...prev, counterpartyId: data[0].id }));
-    }
-  };
+  }, [initialData, counterparties]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

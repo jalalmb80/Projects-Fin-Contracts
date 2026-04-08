@@ -25,13 +25,13 @@ export function useContracts() {
 
     const unsubs = [
       onSnapshot(query(collection(db, 'cms_contracts'), orderBy('start_date', 'desc')),
-        snap => { setContracts(snap.docs.map(d => d.data() as Contract)); setLoading(false); }),
+        snap => { setContracts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Contract))); setLoading(false); }),
       onSnapshot(query(collection(db, 'cms_clients'), orderBy('name_ar')),
-        snap => setClients(snap.docs.map(d => d.data() as Client))),
+        snap => setClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as Client)))),
       onSnapshot(query(collection(db, 'cms_templates'), orderBy('name_ar')),
-        snap => setTemplates(snap.docs.map(d => d.data() as ContractTemplate))),
+        snap => setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() } as ContractTemplate)))),
       onSnapshot(query(collection(db, 'cms_projects'), orderBy('name_ar')),
-        snap => setProjects(snap.docs.map(d => d.data() as Project))),
+        snap => setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)))),
     ];
     return () => unsubs.forEach(u => u());
   }, [user]);

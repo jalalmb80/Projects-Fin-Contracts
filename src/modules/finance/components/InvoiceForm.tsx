@@ -6,13 +6,10 @@ import {
   DocumentStatus, 
   Currency, 
   TaxProfile, 
-  Counterparty, 
-  BillingLineItem,
-  Project
+  BillingLineItem
 } from '../types';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { counterpartyService } from '../services/counterpartyService';
-import { projectService } from '../services/projectService';
+import { useApp } from '../context/AppContext';
 
 interface InvoiceFormProps {
   initialData?: BillingDocument;
@@ -21,6 +18,7 @@ interface InvoiceFormProps {
 }
 
 export default function InvoiceForm({ initialData, onSave, onCancel }: InvoiceFormProps) {
+  const { counterparties, projects } = useApp();
   const [formData, setFormData] = useState<Omit<BillingDocument, 'id' | 'createdAt' | 'updatedAt'>>({
     documentNumber: '',
     type: DocumentType.Invoice,
@@ -41,28 +39,14 @@ export default function InvoiceForm({ initialData, onSave, onCancel }: InvoiceFo
     taxProfile: TaxProfile.Standard,
     notes: ''
   });
-  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadCounterparties();
-    loadProjects();
     if (initialData) {
       const { id, createdAt, updatedAt, ...rest } = initialData;
       setFormData(rest);
     }
   }, [initialData]);
-
-  const loadCounterparties = async () => {
-    const data = await counterpartyService.getAll();
-    setCounterparties(data);
-  };
-
-  const loadProjects = async () => {
-    const data = await projectService.getAll();
-    setProjects(data);
-  };
 
   const calculateTotals = (lines: BillingLineItem[]) => {
     const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
@@ -78,7 +62,6 @@ export default function InvoiceForm({ initialData, onSave, onCancel }: InvoiceFo
       const totals = calculateTotals(formData.lines);
       const dataToSave = {
         ...formData,
-        ...totals,
         ...totals,
         balance: totals.total - formData.paidAmount,
         counterpartyName: counterparties.find(c => c.id === formData.counterpartyId)?.name || ''

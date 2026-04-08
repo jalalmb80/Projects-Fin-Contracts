@@ -1,39 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Search, Edit2, Trash2, Building2, User, Phone, Mail } from 'lucide-react';
 import { Counterparty, CounterpartyType } from '../types';
-import { counterpartyService } from '../services/counterpartyService';
+import { useApp } from '../context/AppContext';
 import CounterpartyForm from '../components/CounterpartyForm';
 
 export default function Counterparties() {
-  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { counterparties, addCounterparty, updateCounterparty, deleteCounterparty, loading } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadCounterparties();
-  }, []);
-
-  const loadCounterparties = async () => {
-    try {
-      const data = await counterpartyService.getAll();
-      setCounterparties(data);
-    } catch (error) {
-      console.error("Error loading counterparties:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSave = async (data: Omit<Counterparty, 'id' | 'createdAt'>) => {
     try {
       if (editingId) {
-        await counterpartyService.update(editingId, data);
+        await updateCounterparty(editingId, data);
       } else {
-        await counterpartyService.add(data);
+        await addCounterparty(data);
       }
-      await loadCounterparties();
       setIsModalOpen(false);
       setEditingId(null);
     } catch (error) {
@@ -49,8 +32,7 @@ export default function Counterparties() {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this counterparty?')) {
       try {
-        await counterpartyService.delete(id);
-        await loadCounterparties();
+        await deleteCounterparty(id);
       } catch (error) {
         console.error("Error deleting counterparty:", error);
       }
@@ -105,7 +87,7 @@ export default function Counterparties() {
           </div>
         </div>
 
-        {loading ? (
+        {loading.counterparties ? (
           <div className="p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
             <p className="mt-2 text-gray-500">Loading counterparties...</p>
