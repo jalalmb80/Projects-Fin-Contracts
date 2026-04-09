@@ -116,6 +116,9 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
   const [activeTab, setActiveTab] = useState<Tab>('metadata');
   const [contract, setContract] = useState<Contract | null>(null);
   const [isSelectingTemplate, setIsSelectingTemplate] = useState(!contractId);
+  const [saveAsTemplateModal, setSaveAsTemplateModal] = useState(false);
+  const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
+  const [saveAsTemplateFeedback, setSaveAsTemplateFeedback] = useState<'success' | null>(null);
 
   useEffect(() => {
     if (contractId) {
@@ -219,12 +222,10 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
     if (contractId) {
       const originalContract = contracts.find((c: Contract) => c.id === contractId);
       if (originalContract) {
-        // Compare without versions
         const currentWithoutVersions = { ...contract, versions: [] };
         const originalWithoutVersions = { ...originalContract, versions: [] };
         
         if (JSON.stringify(currentWithoutVersions) !== JSON.stringify(originalWithoutVersions)) {
-          // Determine what changed
           let summary = 'تحديث تلقائي للعقد';
           if (JSON.stringify(contract.articles) !== JSON.stringify(originalContract.articles)) {
             summary = 'تحديث البنود';
@@ -270,12 +271,15 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
   };
 
   const handleSaveAsTemplate = () => {
-    const templateName = prompt('أدخل اسم القالب الجديد:', contract.title_ar);
-    if (!templateName) return;
+    setSaveAsTemplateName(contract.title_ar || '');
+    setSaveAsTemplateModal(true);
+  };
 
+  const confirmSaveAsTemplate = () => {
+    if (!saveAsTemplateName.trim()) return;
     const newTemplate: ContractTemplate = {
       id: Date.now().toString(),
-      name_ar: templateName,
+      name_ar: saveAsTemplateName.trim(),
       category: 'مخصص',
       default_status: 'مسودة',
       default_type: contract.type,
@@ -283,11 +287,12 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
       default_payment_schedule: JSON.parse(JSON.stringify(contract.payment_schedule)),
       default_appendices: JSON.parse(JSON.stringify(contract.appendices)),
       tags: contract.tags ? [...contract.tags] : [],
-      is_default: false
+      is_default: false,
     };
-
     setTemplates([...templates, newTemplate]);
-    alert('تم حفظ القالب بنجاح');
+    setSaveAsTemplateModal(false);
+    setSaveAsTemplateFeedback('success');
+    setTimeout(() => setSaveAsTemplateFeedback(null), 3000);
   };
 
   const tabs = [
@@ -313,6 +318,11 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
           </div>
         </div>
         <div className="flex items-center space-x-3 space-x-reverse">
+          {saveAsTemplateFeedback === 'success' && (
+            <span className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+              <CheckCircle size={14} /> تم حفظ القالب
+            </span>
+          )}
           <button onClick={handleSaveAsTemplate} className="flex items-center space-x-2 space-x-reverse bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors">
             <FileCode2 size={18} />
             <span>{t('حفظ كقالب', 'Save as Template', lang)}</span>
@@ -323,6 +333,37 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
           </button>
         </div>
       </header>
+
+      {saveAsTemplateModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center no-print" dir="rtl">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">حفظ كقالب جديد</h3>
+            <label className="block text-sm font-medium text-slate-700 mb-2">اسم القالب</label>
+            <input
+              type="text"
+              dir="rtl"
+              value={saveAsTemplateName}
+              onChange={e => setSaveAsTemplateName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confirmSaveAsTemplate()}
+              autoFocus
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none mb-5"
+              placeholder="مثال: قالب تطوير منصة SaaS"
+            />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setSaveAsTemplateModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors">
+                إلغاء
+              </button>
+              <button
+                onClick={confirmSaveAsTemplate}
+                disabled={!saveAsTemplateName.trim()}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <FileCode2 size={16} /> حفظ القالب
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <div className="w-64 bg-white border-l border-slate-200 flex flex-col shrink-0 no-print">
@@ -454,7 +495,6 @@ function MetadataEditor({ contract, setContract, lang, projects, clients, templa
                 </option>
               ))}
             </select>
-            {/* Show color preview dots for selected entity */}
             {(() => {
               const sel = settings.entities.find(e => e.id === (contract.entity_id || getDefaultEntity().id));
               if (!sel) return null;
@@ -1420,6 +1460,7 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
   const visibleArticles = contract.articles.filter((a: Article) => a.is_visible).sort((a: Article, b: Article) => a.order_index - b.order_index);
 
   const [isExporting, setIsExporting] = React.useState(false);
+  const [exportError, setExportError] = React.useState(false);
   const [driveStatus, setDriveStatus] = React.useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [driveLink, setDriveLink] = React.useState<string | null>(null);
 
@@ -1465,7 +1506,8 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
       });
     } catch (err) {
       console.error('PDF export failed:', err);
-      alert(t('فشل تصدير PDF، حاول مرة أخرى', 'PDF export failed, please try again', lang));
+      setExportError(true);
+      setTimeout(() => setExportError(false), 4000);
     } finally {
       setIsExporting(false);
     }
@@ -1474,6 +1516,16 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
   const handlePrint = () => {
     window.print();
   };
+
+  const visibleCount = visibleArticles.length;
+  const arabicNumbers: Record<number, string> = {
+    1: 'بند واحد', 2: 'بندين', 3: 'ثلاثة بنود', 4: 'أربعة بنود',
+    5: 'خمسة بنود', 6: 'ستة بنود', 7: 'سبعة بنود', 8: 'ثمانية بنود',
+    9: 'تسعة بنود', 10: 'عشرة بنود', 11: 'أحد عشر بنداً',
+    12: 'اثني عشر بنداً', 13: 'ثلاثة عشر بنداً', 14: 'أربعة عشر بنداً',
+    15: 'خمسة عشر بنداً',
+  };
+  const countLabel = arabicNumbers[visibleCount] || `${visibleCount} بنود`;
 
   return (
     <div>
@@ -1528,6 +1580,12 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
           <span>{t('فشل الرفع، حاول مرة أخرى', 'Upload failed, try again', lang)}</span>
         </div>
       )}
+      {exportError && (
+        <div className="mb-4 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2 no-print">
+          <AlertCircle size={16} />
+          <span>{t('فشل تصدير PDF، حاول مرة أخرى', 'PDF export failed, please try again', lang)}</span>
+        </div>
+      )}
 
       <div id="contract-preview" className="bg-white shadow-xl border border-slate-200 p-12 max-w-4xl mx-auto text-slate-900 contract-pdf-ready" dir="rtl" style={{ fontFamily: "'Tajawal', sans-serif" }}>
         <div className="flex justify-between items-start mb-8">
@@ -1577,26 +1635,39 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
             </div>
           </div>
 
-          <div className="mb-6 bg-slate-50 p-4 rounded border border-slate-100">
-            <p className="font-bold mb-2" style={{ color: colors.primary }}>الطرف الثاني: {client?.name_ar}</p>
+          <div className="mb-6 bg-slate-50 p-4 rounded border border-slate-100" style={{ backgroundColor: '#f8fafc' }}>
+            <p className="font-bold mb-3" style={{ color: colors.primary }}>الطرف الثاني: {client?.name_ar}</p>
             <div className="grid grid-cols-2 gap-2 text-base">
-              <p>سجل تجاري رقم: {client?.license_no}</p>
-              <p>ويمثلها في هذا العقد: {client?.representative_name} ({client?.representative_title})</p>
-              <p>العنوان: {client?.city} - {client?.address}</p>
-              <p>البريد الإلكتروني: {client?.email}</p>
+              <p>السجل التجاري / الترخيص: {client?.license_no || '—'}</p>
+              <p>ويمثلها: {client?.representative_name || '—'} — {client?.representative_title || '—'}</p>
+              <p>المدينة: {client?.city || '—'}</p>
+              <p>العنوان: {client?.address || '—'}</p>
+              {(client?.po_box || client?.postal_code) && (
+                <p>ص.ب / الرمز البريدي: {client?.po_box || '—'} / {client?.postal_code || '—'}</p>
+              )}
+              {client?.phone && <p>الهاتف: <span dir="ltr">{client.phone}</span></p>}
+              {client?.email && <p>البريد الإلكتروني: <span dir="ltr">{client.email}</span></p>}
             </div>
           </div>
         </div>
 
         <div className="space-y-8 text-lg">
-          {visibleArticles.map((article: Article, idx: number) => (
+          {visibleArticles.map((article: Article, idx: number) => {
+            const displayBody = article.article_type === 'نسخ الاتفاقية'
+              ? (article.body_ar || '').replace(/\b(واحد|اثنين|ثلاثة|أربعة|خمسة|ستة|سبعة|ثمانية|تسعة|عشرة|أحد عشر|اثني عشر|ثلاثة عشر|أربعة عشر|خمسة عشر)\s+بند[اً]?/g, countLabel)
+              : (article.body_ar || '(نص البند فارغ)');
+
+            return (
             <div key={article.id} className="article-block">
               <h3 className="text-xl font-bold mb-3" style={{ color: colors.accent }}>البند {idx + 1}: {article.title_ar}</h3>
               {article.blocks && article.blocks.length > 0 ? (
                 <div className="space-y-4">
                   {article.blocks.map((block: ArticleBlock) => {
                     if (block.type === 'paragraph') {
-                      return <p key={block.id} className="whitespace-pre-wrap leading-relaxed text-justify">{block.text_ar}</p>;
+                      const blockText = article.article_type === 'نسخ الاتفاقية'
+                        ? (block.text_ar || '').replace(/\b(واحد|اثنين|ثلاثة|أربعة|خمسة|ستة|سبعة|ثمانية|تسعة|عشرة|أحد عشر|اثني عشر|ثلاثة عشر|أربعة عشر|خمسة عشر)\s+بند[اً]?/g, countLabel)
+                        : block.text_ar;
+                      return <p key={block.id} className="whitespace-pre-wrap leading-relaxed text-justify">{blockText}</p>;
                     } else if (block.type === 'list') {
                       const ListTag = block.style === 'ordered' || block.style === 'alpha' ? 'ol' : 'ul';
                       const listClass = block.style === 'ordered' ? 'list-decimal' : block.style === 'alpha' ? 'list-[lower-alpha]' : 'list-disc';
@@ -1614,97 +1685,120 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
                   })}
                 </div>
               ) : (
-                <div className="whitespace-pre-wrap leading-relaxed text-justify">{article.body_ar || '(نص البند فارغ)'}</div>
+                <div className="whitespace-pre-wrap leading-relaxed text-justify">{displayBody}</div>
               )}
+
+              {article.article_type === 'القيمة والدفعات' && schedule.tasks.length > 0 && (
+                <div className="mt-6">
+                  <table className="w-full border-collapse border border-slate-300 mb-6 text-base">
+                    <thead style={{ backgroundColor: colors.primary }}>
+                      <tr>
+                        <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">المهمة</th>
+                        <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">المدة</th>
+                        <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">التكلفة (ريال)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schedule.tasks.map((task: TaskRow, index: number) => (
+                        <tr key={task.id} style={{ backgroundColor: index % 2 === 0 ? colors.secondary : '#ffffff' }}>
+                          <td className="border border-slate-300 px-4 py-2">{task.task_name_ar}</td>
+                          <td className="border border-slate-300 px-4 py-2">{task.duration}</td>
+                          <td className="border border-slate-300 px-4 py-2">{task.cost_sar.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot style={{ backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
+                      <tr>
+                        <td colSpan={2} className="border border-slate-300 px-4 py-2">الإجمالي غير شامل الضريبة</td>
+                        <td className="border border-slate-300 px-4 py-2">{schedule.subtotal_sar.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={2} className="border border-slate-300 px-4 py-2">ضريبة القيمة المضافة ({schedule.vat_rate}%)</td>
+                        <td className="border border-slate-300 px-4 py-2">{schedule.vat_amount.toLocaleString()}</td>
+                      </tr>
+                      <tr style={{ backgroundColor: colors.secondary }}>
+                        <td colSpan={2} className="border border-slate-300 px-4 py-2" style={{ color: colors.accent }}>الإجمالي الكلي</td>
+                        <td className="border border-slate-300 px-4 py-2" style={{ color: colors.accent }}>{schedule.total_sar.toLocaleString()}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  {schedule.installments.length > 0 && (
+                    <div className="mb-6">
+                      <p className="font-bold mb-2">طريقة الدفع:</p>
+                      <ul className="list-disc list-inside space-y-4 mr-4">
+                        {schedule.installments.map((inst: Installment) => (
+                          <li key={inst.id}>
+                            <span className="font-bold">{inst.label_ar}</span>: نسبة {inst.percentage}% تستحق عند {inst.trigger_event}.
+                            <div className="mt-1 text-slate-700">
+                              المبلغ: {inst.amount_sar.toLocaleString()} ريال سعودي ({inst.amount_words_ar})
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="p-4 border border-slate-200 rounded text-base" style={{ backgroundColor: colors.secondary }}>
+                    <p className="font-bold mb-2">البيانات البنكية للطرف الأول:</p>
+                    <p>اسم البنك: {schedule.bank_name}</p>
+                    <p>اسم الحساب: {schedule.account_holder}</p>
+                    <p>رقم الآيبان: <span dir="ltr">{schedule.bank_iban}</span></p>
+                  </div>
+                </div>
+              )}
+            </div>
+            );
+          })}
+
+          <div className="mt-24 grid grid-cols-2 gap-12 text-center text-lg signature-block">
+            <div>
+              <p className="font-bold mb-8">الطرف الأول</p>
+              <p>الاسم: {entity.representative_name}</p>
+              <p className="mt-4">التوقيع: ___________________</p>
+            </div>
+            <div>
+              <p className="font-bold mb-8">الطرف الثاني</p>
+              <p>الاسم: {client?.representative_name}</p>
+              <p className="mt-4">التوقيع: ___________________</p>
+            </div>
+          </div>
+
+          {contract.appendices.map((app: Appendix, idx: number) => (
+            <div key={app.id} className="contract-page-break" style={{ pageBreakBefore: 'always', marginTop: '48px', paddingTop: '32px', borderTop: '2px solid #1e293b' }}>
+              {idx === 0 && <h2 className="text-2xl font-bold mb-8 text-center">الملاحق</h2>}
+              <h3 className="text-xl font-bold mb-3" style={{ color: colors.accent }}>
+                الملحق {idx + 1}: {app.title_ar}
+              </h3>
+              <div className="whitespace-pre-wrap leading-relaxed text-justify">
+                {app.body_ar || '(نص الملحق فارغ)'}
+              </div>
             </div>
           ))}
 
-          {schedule.tasks.length > 0 && (
-            <div>
-              <h3 className="text-xl font-bold mb-3" style={{ color: colors.accent }}>البند {visibleArticles.length + 1}: جدول الدفعات والمهام</h3>
-              
-              <table className="w-full border-collapse border border-slate-300 mb-6 text-base">
+          {contract.attachments.length > 0 && (
+            <div className="contract-page-break" style={{ pageBreakBefore: 'always', marginTop: '48px', paddingTop: '32px', borderTop: '2px solid #1e293b' }}>
+              <h2 className="text-2xl font-bold mb-8 text-center">المرفقات</h2>
+              <table className="w-full border-collapse border border-slate-300 text-base">
                 <thead style={{ backgroundColor: colors.primary }}>
                   <tr>
-                    <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">المهمة</th>
-                    <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">المدة</th>
-                    <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">التكلفة (ريال)</th>
+                    <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">اسم المرفق</th>
+                    <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">النوع</th>
+                    <th className="border border-slate-300 px-4 py-2 text-right text-white font-medium">التاريخ</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {schedule.tasks.map((task: TaskRow, index: number) => (
-                    <tr key={task.id} style={{ backgroundColor: index % 2 === 0 ? colors.secondary : 'white' }}>
-                      <td className="border border-slate-300 px-4 py-2">{task.task_name_ar}</td>
-                      <td className="border border-slate-300 px-4 py-2">{task.duration}</td>
-                      <td className="border border-slate-300 px-4 py-2">{task.cost_sar.toLocaleString()}</td>
+                  {contract.attachments.map((att: Attachment, index: number) => (
+                    <tr key={att.id} style={{ backgroundColor: index % 2 === 0 ? colors.secondary : '#ffffff' }}>
+                      <td className="border border-slate-300 px-4 py-2">{att.title}</td>
+                      <td className="border border-slate-300 px-4 py-2">{att.attachment_type}</td>
+                      <td className="border border-slate-300 px-4 py-2">{att.uploaded_at}</td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="bg-slate-50 font-bold">
-                  <tr>
-                    <td colSpan={2} className="border border-slate-300 px-4 py-2">الإجمالي غير شامل الضريبة</td>
-                    <td className="border border-slate-300 px-4 py-2">{schedule.subtotal_sar.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td colSpan={2} className="border border-slate-300 px-4 py-2">ضريبة القيمة المضافة ({schedule.vat_rate}%)</td>
-                    <td className="border border-slate-300 px-4 py-2">{schedule.vat_amount.toLocaleString()}</td>
-                  </tr>
-                  <tr style={{ backgroundColor: colors.secondary }}>
-                    <td colSpan={2} className="border border-slate-300 px-4 py-2" style={{ color: colors.accent }}>الإجمالي الكلي</td>
-                    <td className="border border-slate-300 px-4 py-2" style={{ color: colors.accent }}>{schedule.total_sar.toLocaleString()}</td>
-                  </tr>
-                </tfoot>
               </table>
-
-              {schedule.installments.length > 0 && (
-                <div className="mb-6">
-                  <p className="font-bold mb-2">طريقة الدفع:</p>
-                  <ul className="list-disc list-inside space-y-4 mr-4">
-                    {schedule.installments.map((inst: Installment) => (
-                      <li key={inst.id}>
-                        <span className="font-bold">{inst.label_ar}</span>: نسبة {inst.percentage}% تستحق عند {inst.trigger_event}.
-                        <div className="mt-1 text-slate-700">
-                          المبلغ: {inst.amount_sar.toLocaleString()} ريال سعودي ({inst.amount_words_ar})
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="p-4 border border-slate-200 rounded text-base" style={{ backgroundColor: colors.secondary }}>
-                <p className="font-bold mb-2">البيانات البنكية للطرف الأول:</p>
-                <p>اسم البنك: {schedule.bank_name}</p>
-                <p>اسم الحساب: {schedule.account_holder}</p>
-                <p>رقم الآيبان: <span dir="ltr">{schedule.bank_iban}</span></p>
-              </div>
             </div>
           )}
-
-          {contract.appendices.length > 0 && (
-            <div className="mt-12 pt-8 border-t-2 border-slate-800">
-              <h2 className="text-2xl font-bold mb-8 text-center">الملاحق</h2>
-              {contract.appendices.map((app: Appendix, idx: number) => (
-                <div key={app.id} className="mb-8">
-                  <h3 className="text-xl font-bold mb-3" style={{ color: colors.accent }}>الملحق {idx + 1}: {app.title_ar}</h3>
-                  <div className="whitespace-pre-wrap leading-relaxed text-justify">{app.body_ar || '(نص الملحق فارغ)'}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-24 grid grid-cols-2 gap-12 text-center text-lg signature-block">
-          <div>
-            <p className="font-bold mb-8">الطرف الأول</p>
-            <p>الاسم: {entity.representative_name}</p>
-            <p className="mt-4">التوقيع: ___________________</p>
-          </div>
-          <div>
-            <p className="font-bold mb-8">الطرف الثاني</p>
-            <p>الاسم: {client?.representative_name}</p>
-            <p className="mt-4">التوقيع: ___________________</p>
-          </div>
         </div>
       </div>
     </div>

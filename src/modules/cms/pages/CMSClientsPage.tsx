@@ -26,6 +26,7 @@ export default function CMSClientsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [formData, setFormData] = useState<ClientFormData>(EMPTY_FORM);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const showFeedback = (type: 'success' | 'error', msg: string) => {
     setFeedback({ type, msg });
@@ -73,14 +74,17 @@ export default function CMSClientsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this client?')) {
-      try {
-        await deleteClient(id);
-        showFeedback('success', 'تم حذف العميل بنجاح');
-      } catch (error) {
-        console.error('Error deleting client:', error);
-        showFeedback('error', 'حدث خطأ أثناء حذف العميل');
-      }
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    setConfirmDeleteId(null);
+    try {
+      await deleteClient(id);
+      showFeedback('success', 'تم حذف العميل بنجاح');
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      showFeedback('error', 'حدث خطأ أثناء حذف العميل');
     }
   };
 
@@ -139,8 +143,12 @@ export default function CMSClientsPage() {
                   <button onClick={() => handleOpenModal(client)} className="text-emerald-600 hover:text-emerald-700">
                     <Edit2 size={18} />
                   </button>
-                  <button onClick={() => handleDelete(client.id)} className="text-red-500 hover:text-red-600">
-                    <Trash2 size={18} />
+                  <button
+                    onClick={() => handleDelete(client.id)}
+                    className={`transition-colors ${confirmDeleteId === client.id ? 'text-red-700 font-medium text-xs' : 'text-red-400 hover:text-red-600'}`}
+                    title={confirmDeleteId === client.id ? 'اضغط مرة أخرى للتأكيد' : 'حذف'}
+                  >
+                    {confirmDeleteId === client.id ? 'تأكيد الحذف' : <Trash2 size={18} />}
                   </button>
                 </td>
               </tr>
@@ -169,13 +177,11 @@ export default function CMSClientsPage() {
             </div>
             <form onSubmit={handleSubmit} className="p-6">
               <div className="grid grid-cols-2 gap-4 mb-6">
-
                 <div className="space-y-2 col-span-2">
                   <label className="text-sm font-medium text-slate-700">الاسم بالعربية (Name AR) *</label>
                   <input type="text" required value={formData.name_ar}
                     onChange={e => setFormData({ ...formData, name_ar: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">نوع الجهة (Entity Type) *</label>
                   <select required value={formData.entity_type}
@@ -187,67 +193,56 @@ export default function CMSClientsPage() {
                     <option value="فرد">فرد (Individual)</option>
                   </select>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">جهة الترخيص (License Authority)</label>
                   <input type="text" value={formData.license_authority}
                     onChange={e => setFormData({ ...formData, license_authority: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">رقم الترخيص (License No)</label>
                   <input type="text" value={formData.license_no}
                     onChange={e => setFormData({ ...formData, license_no: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">اسم الممثل (Representative Name)</label>
                   <input type="text" value={formData.representative_name}
                     onChange={e => setFormData({ ...formData, representative_name: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">صفة الممثل (Representative Title)</label>
                   <input type="text" value={formData.representative_title}
                     onChange={e => setFormData({ ...formData, representative_title: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">رقم الهوية الوطنية (National ID)</label>
                   <input type="text" value={formData.national_id}
                     onChange={e => setFormData({ ...formData, national_id: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">البريد الإلكتروني (Email)</label>
                   <input type="email" value={formData.email}
                     onChange={e => setFormData({ ...formData, email: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">رقم الهاتف (Phone)</label>
                   <input type="text" value={formData.phone}
                     onChange={e => setFormData({ ...formData, phone: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">المدينة (City)</label>
                   <input type="text" value={formData.city}
                     onChange={e => setFormData({ ...formData, city: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">الرمز البريدي (Postal Code)</label>
                   <input type="text" value={formData.postal_code}
                     onChange={e => setFormData({ ...formData, postal_code: e.target.value })} className={inp} />
                 </div>
-
                 <div className="space-y-2 col-span-2">
                   <label className="text-sm font-medium text-slate-700">العنوان (Address)</label>
                   <input type="text" value={formData.address}
                     onChange={e => setFormData({ ...formData, address: e.target.value })} className={inp} />
                 </div>
-
               </div>
               <div className="flex justify-end space-x-3 space-x-reverse pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsModalOpen(false)}
