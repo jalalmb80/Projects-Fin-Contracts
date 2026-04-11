@@ -4,6 +4,7 @@ import { usePlatform } from '../context/PlatformContext';
 import { MODULES } from '../registry';
 import ModuleSwitcher from './ModuleSwitcher';
 import LoginPage from '../pages/LoginPage';
+import GlobalSettingsPage from '../pages/GlobalSettingsPage';
 
 export default function AppShell() {
   const { user, loadingAuth } = usePlatform();
@@ -36,6 +37,7 @@ export default function AppShell() {
         }>
           <Routes>
             <Route path="/" element={<Navigate to="/finance/dashboard" replace />} />
+            <Route path="/settings" element={<GlobalSettingsPage />} />
             {MODULES.map(mod => {
               const Component = mod.component;
               return (

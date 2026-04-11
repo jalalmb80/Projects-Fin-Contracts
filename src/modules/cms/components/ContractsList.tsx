@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Contract } from '../types';
-import { Plus, Search, FileText, Edit2, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Search, FileText, Edit2, Trash2, AlertCircle, Filter } from 'lucide-react';
 import { useLang, t } from '../context/LanguageContext';
 import { useContracts } from '../hooks/useContracts';
 
@@ -19,13 +19,13 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'مسودة': return 'bg-amber-100 text-amber-700';
-      case 'نشط': return 'bg-emerald-100 text-emerald-700';
-      case 'قيد المراجعة': return 'bg-purple-100 text-purple-700';
-      case 'موقّع': return 'bg-blue-100 text-blue-700';
-      case 'مكتمل': return 'bg-slate-100 text-slate-700';
-      case 'منتهي': return 'bg-red-100 text-red-700';
-      default: return 'bg-slate-100 text-slate-700';
+      case '\u0645\u0633\u0648\u062f\u0629': return 'bg-amber-100 text-amber-800';
+      case '\u0646\u0634\u0637': return 'bg-green-100 text-green-800';
+      case '\u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629': return 'bg-purple-100 text-purple-800';
+      case '\u0645\u0648\u0642\u0651\u0639': return 'bg-blue-100 text-blue-800';
+      case '\u0645\u0643\u062a\u0645\u0644': return 'bg-gray-100 text-gray-800';
+      case '\u0645\u0646\u062a\u0647\u064a': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -37,105 +37,97 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
 
   const getClientName = (clientId: string) => {
     const client = clients.find((c: any) => c.id === clientId);
-    return client ? (client.name_ar || client.nameAr || client.name || '—') : '—';
+    return client ? (client.name_ar || client.nameAr || client.name || '\u2014') : '\u2014';
   };
 
-  const confirmTarget = confirmDeleteId
-    ? contracts.find((c: Contract) => c.id === confirmDeleteId)
-    : null;
+  const confirmTarget = confirmDeleteId ? contracts.find((c: Contract) => c.id === confirmDeleteId) : null;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6 p-6">
       {confirmDeleteId && (
-        <div className="flex items-center gap-4 bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-800" dir="rtl">
+        <div className="flex items-center gap-4 bg-red-50 border border-red-200 rounded-lg px-5 py-4 text-sm text-red-800">
           <AlertCircle size={18} className="shrink-0 text-red-600" />
           <span className="flex-1">
-            هل تريد حذف العقد <strong>{confirmTarget?.contract_number}</strong> — {confirmTarget?.title_ar}؟ لا يمكن التراجع عن هذا الإجراء.
+            {t('\u0647\u0644 \u062a\u0631\u064a\u062f \u062d\u0630\u0641 \u0627\u0644\u0639\u0642\u062f', 'Delete contract', lang)}{' '}
+            <strong>{confirmTarget?.contract_number}</strong>{' \u2014 '}{confirmTarget?.title_ar}
+            {t('\u061f \u0644\u0627 \u064a\u0645\u0643\u0646 \u0627\u0644\u062a\u0631\u0627\u062c\u0639.', '? This cannot be undone.', lang)}
           </span>
-          <button onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">
-            حذف
-          </button>
-          <button onClick={() => setConfirmDeleteId(null)} className="text-red-600 hover:text-red-700 px-3 py-1.5 rounded-lg font-medium transition-colors">
-            إلغاء
-          </button>
+          <button onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-lg font-medium">{t('\u062d\u0630\u0641','Delete',lang)}</button>
+          <button onClick={() => setConfirmDeleteId(null)} className="text-red-600 hover:text-red-700 px-3 py-1.5 rounded-lg font-medium">{t('\u0625\u0644\u063a\u0627\u0621','Cancel',lang)}</button>
         </div>
       )}
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{t('إدارة العقود', 'Contract Management', lang)}</h1>
-          <p className="text-slate-500 mt-1">{t('إدارة وتتبع جميع العقود', 'Manage and track all contracts', lang)}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('\u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0639\u0642\u0648\u062f', 'Contract Management', lang)}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('\u0625\u062f\u0627\u0631\u0629 \u0648\u062a\u062a\u0628\u0639 \u062c\u0645\u064a\u0639 \u0627\u0644\u0639\u0642\u0648\u062f', 'Manage and track all contracts', lang)}</p>
         </div>
-        <button onClick={onCreate} className="flex items-center space-x-2 space-x-reverse bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-          <Plus size={18} />
-          <span>{t('عقد جديد', 'New Contract', lang)}</span>
+        <button onClick={onCreate} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
+          <Plus className="mr-2 h-4 w-4" />
+          {t('\u0639\u0642\u062f \u062c\u062f\u064a\u062f', 'New Contract', lang)}
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input
-            type="text"
-            placeholder={t('بحث برقم العقد أو العنوان...', 'Search by contract number or title...', lang)}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-4 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-          />
+      <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1 max-w-md">
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            <input type="text" dir="rtl"
+              placeholder={t('\u0628\u062d\u062b \u0628\u0631\u0642\u0645 \u0627\u0644\u0639\u0642\u062f \u0623\u0648 \u0627\u0644\u0639\u0646\u0648\u0627\u0646...', 'Search by contract number or title...', lang)}
+              value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+              className="block w-full pr-10 pl-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-emerald-500 focus:border-emerald-500" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-5 w-5 text-gray-400 shrink-0" />
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              className="block border border-gray-300 rounded-md py-2 pl-3 pr-8 text-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+              <option value="all">{t('\u062c\u0645\u064a\u0639 \u0627\u0644\u062d\u0627\u0644\u0627\u062a','All Statuses',lang)}</option>
+              <option value="\u0645\u0633\u0648\u062f\u0629">{t('\u0645\u0633\u0648\u062f\u0629','Draft',lang)}</option>
+              <option value="\u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629">{t('\u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629','In Review',lang)}</option>
+              <option value="\u0645\u0648\u0642\u0651\u0639">{t('\u0645\u0648\u0642\u0651\u0639','Signed',lang)}</option>
+              <option value="\u0646\u0634\u0637">{t('\u0646\u0634\u0637','Active',lang)}</option>
+              <option value="\u0645\u0643\u062a\u0645\u0644">{t('\u0645\u0643\u062a\u0645\u0644','Completed',lang)}</option>
+            </select>
+          </div>
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white min-w-[200px]">
-          <option value="all">{t('جميع الحالات', 'All Statuses', lang)}</option>
-          <option value="مسودة">{t('مسودة', 'Draft', lang)}</option>
-          <option value="قيد المراجعة">{t('قيد المراجعة', 'In Review', lang)}</option>
-          <option value="موقّع">{t('موقّع', 'Signed', lang)}</option>
-          <option value="نشط">{t('نشط', 'Active', lang)}</option>
-          <option value="مكتمل">{t('مكتمل', 'Completed', lang)}</option>
-        </select>
-      </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {filteredContracts.length === 0 ? (
-          <div className="text-center py-12">
-            <FileText className="mx-auto h-12 w-12 text-slate-300 mb-4" />
-            <p className="text-slate-500 text-lg">{t('لا توجد عقود', 'No contracts found', lang)}</p>
+          <div className="p-12 text-center text-gray-500">
+            <FileText className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+            <h3 className="text-sm font-medium text-gray-900">{t('\u0644\u0627 \u062a\u0648\u062c\u062f \u0639\u0642\u0648\u062f','No contracts found',lang)}</h3>
+            <p className="mt-1 text-sm">{t('\u0623\u0646\u0634\u0626 \u0639\u0642\u062f\u064b\u0627 \u062c\u062f\u064a\u062f\u064b\u0627 \u0644\u0644\u0628\u062f\u0621','Create a new contract to get started',lang)}</p>
           </div>
         ) : (
-          <table className="w-full text-right">
-            <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
-              <tr>
-                <th className="px-6 py-4 font-medium">{t('رقم العقد', 'Contract No.', lang)}</th>
-                <th className="px-6 py-4 font-medium">{t('العنوان', 'Title', lang)}</th>
-                <th className="px-6 py-4 font-medium">{t('العميل', 'Client', lang)}</th>
-                <th className="px-6 py-4 font-medium">{t('الحالة', 'Status', lang)}</th>
-                <th className="px-6 py-4 font-medium">{t('تاريخ البدء', 'Start Date', lang)}</th>
-                <th className="px-6 py-4 font-medium text-left">{t('إجراءات', 'Actions', lang)}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredContracts.map((c: Contract) => (
-                <tr key={c.id} className={`hover:bg-slate-50 transition-colors ${confirmDeleteId === c.id ? 'bg-red-50' : ''}`}>
-                  <td className="px-6 py-4 text-sm font-medium text-slate-900">{c.contract_number || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-slate-900">{c.title_ar}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{getClientName(c.client_id)}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(c.status)}`}>{c.status}</span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-500">{c.start_date || '-'}</td>
-                  <td className="px-6 py-4 text-left space-x-3 space-x-reverse">
-                    <button onClick={() => onEdit(c.id)} className="text-emerald-600 hover:text-emerald-700">
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(confirmDeleteId === c.id ? null : c.id)}
-                      className={`transition-colors ${confirmDeleteId === c.id ? 'text-red-700' : 'text-red-400 hover:text-red-600'}`}
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  {[t('\u0631\u0642\u0645 \u0627\u0644\u0639\u0642\u062f','Contract No.',lang),t('\u0627\u0644\u0639\u0646\u0648\u0627\u0646','Title',lang),t('\u0627\u0644\u0639\u0645\u064a\u0644','Client',lang),t('\u0627\u0644\u062d\u0627\u0644\u0629','Status',lang),t('\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0628\u062f\u0621','Start Date',lang),t('\u0625\u062c\u0631\u0627\u0621\u0627\u062a','Actions',lang)].map((h,i)=>(
+                    <th key={i} scope="col" className={`px-6 py-3 ${i===5?'text-left':'text-right'} text-xs font-medium text-gray-500 uppercase tracking-wider`}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredContracts.map((c: Contract) => (
+                  <tr key={c.id} className={`hover:bg-gray-50 transition-colors ${confirmDeleteId===c.id?'bg-red-50':''}`}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-emerald-600">{c.contract_number||'-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{c.title_ar}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getClientName(c.client_id)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(c.status)}`}>{c.status}</span></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.start_date||'-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-left">
+                      <div className="flex items-center gap-3">
+                        <button onClick={()=>onEdit(c.id)} className="text-emerald-600 hover:text-emerald-900"><Edit2 size={18}/></button>
+                        <button onClick={()=>setConfirmDeleteId(confirmDeleteId===c.id?null:c.id)} className={`transition-colors ${confirmDeleteId===c.id?'text-red-700':'text-red-400 hover:text-red-600'}`}><Trash2 size={18}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
