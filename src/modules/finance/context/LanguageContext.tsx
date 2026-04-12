@@ -8,12 +8,14 @@ interface LanguageContextType {
 }
 
 const LanguageContext = createContext<LanguageContextType>({
-  lang: 'ar',
+  lang: 'en',
   setLang: () => {},
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>('ar');
+  // Finance module is English-first. Default is 'en'.
+  // CMS module has its own LanguageContext that defaults to 'ar'.
+  const [lang, setLang] = useState<Lang>('en');
   return (
     <LanguageContext.Provider value={{ lang, setLang }}>
       {children}
