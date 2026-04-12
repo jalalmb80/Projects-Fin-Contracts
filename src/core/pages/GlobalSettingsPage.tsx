@@ -13,7 +13,7 @@ const EMPTY_ENTITY = (): PlatformEntity => ({
   taxId: '',
   cr_number: '',
   representative_name: '',
-  representative_title: '\u0627\u0644\u0645\u062f\u064a\u0631 \u0627\u0644\u0639\u0627\u0645',
+  representative_title: 'المدير العام',
   address: '',
   city: '',
   postal_code: '',
@@ -71,8 +71,8 @@ export default function GlobalSettingsPage() {
       });
       setEditingId(null);
       setEditData(null);
-      showFeedback('success', '\u062a\u0645 \u062d\u0641\u0638 \u0627\u0644\u0643\u064a\u0627\u0646 \u0628\u0646\u062c\u0627\u062d / Entity saved successfully');
-    } catch { showFeedback('error', '\u0641\u0634\u0644 \u0627\u0644\u062d\u0641\u0638 / Save failed'); }
+      showFeedback('success', 'تم حفظ الكيان بنجاح / Entity saved successfully');
+    } catch { showFeedback('error', 'فشل الحفظ / Save failed'); }
     finally { setIsSaving(false); }
   };
 
@@ -83,8 +83,8 @@ export default function GlobalSettingsPage() {
     setIsSaving(true);
     try {
       await updateGlobalSettings({ ...globalSettings, entities: updated });
-      showFeedback('success', '\u062a\u0645 \u0627\u0644\u062d\u0630\u0641 / Deleted');
-    } catch { showFeedback('error', '\u0641\u0634\u0644 \u0627\u0644\u062d\u0630\u0641 / Delete failed'); }
+      showFeedback('success', 'تم الحذف / Deleted');
+    } catch { showFeedback('error', 'فشل الحذف / Delete failed'); }
     finally { setIsSaving(false); }
   };
 
@@ -106,8 +106,8 @@ export default function GlobalSettingsPage() {
       });
       setIsAdding(false);
       setNewEntity(EMPTY_ENTITY());
-      showFeedback('success', '\u062a\u0645\u062a \u0627\u0644\u0625\u0636\u0627\u0641\u0629 / Entity added');
-    } catch { showFeedback('error', '\u0641\u0634\u0644\u062a \u0627\u0644\u0625\u0636\u0627\u0641\u0629 / Add failed'); }
+      showFeedback('success', 'تمت الإضافة / Entity added');
+    } catch { showFeedback('error', 'فشلت الإضافة / Add failed'); }
     finally { setIsSaving(false); }
   };
 
@@ -115,8 +115,8 @@ export default function GlobalSettingsPage() {
     setIsSaving(true);
     try {
       await updateGlobalSettings({ ...globalSettings, ...updates });
-      showFeedback('success', '\u062a\u0645 \u062d\u0641\u0638 \u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a / Settings saved');
-    } catch { showFeedback('error', '\u0641\u0634\u0644 \u0627\u0644\u062d\u0641\u0638 / Save failed'); }
+      showFeedback('success', 'تم حفظ الإعدادات / Settings saved');
+    } catch { showFeedback('error', 'فشل الحفظ / Save failed'); }
     finally { setIsSaving(false); }
   };
 
@@ -153,64 +153,64 @@ export default function GlobalSettingsPage() {
         <input name="name" type="text" value={entity.name} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0627\u0633\u0645 \u0628\u0627\u0644\u0639\u0631\u0628\u064a\u0629</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">الاسم بالعربية</label>
         <input name="name_ar" dir="rtl" type="text" value={entity.name_ar} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Tax ID / \u0627\u0644\u0633\u062c\u0644 \u0627\u0644\u062a\u062c\u0627\u0631\u064a</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Tax ID / السجل التجاري</label>
         <input name="taxId" type="text" value={entity.taxId} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0639\u0645\u0644\u0629 / Currency</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">العملة / Currency</label>
         <select name="currency" value={entity.currency} onChange={onChange} className={inp}>
           {['SAR', 'USD', 'EUR', 'GBP', 'AED'].map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0645\u0645\u062b\u0644 / Representative</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">الممثل / Representative</label>
         <input name="representative_name" type="text" value={entity.representative_name || ''} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0635\u0641\u0629 / Title</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">الصفة / Title</label>
         <input name="representative_title" type="text" value={entity.representative_title || ''} onChange={onChange} className={inp} />
       </div>
       <div className="sm:col-span-2">
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0639\u0646\u0648\u0627\u0646 / Address</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">العنوان / Address</label>
         <input name="address" type="text" value={entity.address} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0645\u062f\u064a\u0646\u0629 / City</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">المدينة / City</label>
         <input name="city" type="text" value={entity.city || ''} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0631\u0645\u0632 \u0627\u0644\u0628\u0631\u064a\u062f\u064a / Postal Code</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">الرمز البريدي / Postal Code</label>
         <input name="postal_code" type="text" value={entity.postal_code || ''} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0647\u0627\u062a\u0641 / Phone</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">الهاتف / Phone</label>
         <input name="phone" type="text" value={entity.phone || ''} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0644\u0628\u0631\u064a\u062f \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a / Email</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">البريد الإلكتروني / Email</label>
         <input name="email" type="email" value={entity.email || ''} onChange={onChange} className={inp} />
       </div>
       <div className="sm:col-span-2 pt-3 border-t border-slate-100">
-        <p className="text-xs font-semibold text-slate-500 uppercase mb-3">\u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0628\u0646\u0643\u064a\u0629 / Banking</p>
+        <p className="text-xs font-semibold text-slate-500 uppercase mb-3">البيانات البنكية / Banking</p>
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0633\u0645 \u0627\u0644\u0628\u0646\u0643 / Bank Name</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">اسم البنك / Bank Name</label>
         <input name="bank_name" type="text" value={entity.bank_name || ''} onChange={onChange} className={inp} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0627\u0633\u0645 \u0627\u0644\u062d\u0633\u0627\u0628 / Account Holder</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">اسم الحساب / Account Holder</label>
         <input name="account_holder" type="text" value={entity.account_holder || ''} onChange={onChange} className={inp} />
       </div>
       <div className="sm:col-span-2">
-        <label className="block text-xs font-medium text-slate-600 mb-1">\u0631\u0642\u0645 \u0627\u0644\u0622\u064a\u0628\u0627\u0646 / IBAN</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">رقم الآيبان / IBAN</label>
         <input name="bank_iban" dir="ltr" type="text" value={entity.bank_iban || ''} onChange={onChange} className={`${inp} font-mono`} />
       </div>
       <div className="sm:col-span-2 pt-3 border-t border-slate-100">
-        <p className="text-xs font-semibold text-slate-500 uppercase mb-3">\u0623\u0644\u0648\u0627\u0646 \u0627\u0644\u0647\u0648\u064a\u0629 / Brand Colors</p>
+        <p className="text-xs font-semibold text-slate-500 uppercase mb-3">ألوان الهوية / Brand Colors</p>
         <div className="flex gap-6">
           {[{name:'primary_color',label:'Primary'},{name:'secondary_color',label:'Secondary'},{name:'accent_color',label:'Accent'}].map(({name,label})=>(
             <div key={name} className="flex items-center gap-2">
@@ -233,7 +233,7 @@ export default function GlobalSettingsPage() {
       <div className="flex items-center gap-3 mb-2">
         <Globe size={26} className="text-emerald-600" />
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Platform Settings / \u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Platform Settings / الإعدادات العامة</h1>
           <p className="text-sm text-slate-500 mt-0.5">Shared across Finance and Contracts modules</p>
         </div>
       </div>
@@ -245,7 +245,7 @@ export default function GlobalSettingsPage() {
       )}
 
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-        {([{id:'general',label:'General / \u0639\u0627\u0645',icon:Globe},{id:'entities',label:'Entities / \u0627\u0644\u0643\u064a\u0627\u0646\u0627\u062a',icon:Building2}] as const).map(({id,label,icon:Icon})=>(
+        {([{id:'general',label:'General / عام',icon:Globe},{id:'entities',label:'Entities / الكيانات',icon:Building2}] as const).map(({id,label,icon:Icon})=>(
           <button key={id} onClick={()=>setActiveSection(id)}
             className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${activeSection===id?'bg-white text-emerald-700 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>
             <Icon size={15}/> {label}
@@ -258,14 +258,14 @@ export default function GlobalSettingsPage() {
           <h2 className="text-base font-semibold text-slate-800 border-b border-slate-100 pb-3">General Platform Settings</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Default Language / \u0627\u0644\u0644\u063a\u0629 \u0627\u0644\u0627\u0641\u062a\u0631\u0627\u0636\u064a\u0629</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Default Language / اللغة الافتراضية</label>
               <select value={globalSettings.default_language} onChange={e=>saveGeneral({default_language:e.target.value as 'ar'|'en'})} className={inp}>
-                <option value="ar">\u0627\u0644\u0639\u0631\u0628\u064a\u0629 / Arabic</option>
-                <option value="en">English / \u0627\u0644\u0625\u0646\u062c\u0644\u064a\u0632\u064a\u0629</option>
+                <option value="ar">العربية / Arabic</option>
+                <option value="en">English / الإنجليزية</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Default Currency / \u0627\u0644\u0639\u0645\u0644\u0629 \u0627\u0644\u0627\u0641\u062a\u0631\u0627\u0636\u064a\u0629</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Default Currency / العملة الافتراضية</label>
               <select value={globalSettings.default_currency} onChange={e=>saveGeneral({default_currency:e.target.value})} className={inp}>
                 {['SAR','USD','EUR','GBP','AED'].map(c=><option key={c} value={c}>{c}</option>)}
               </select>
@@ -336,7 +336,7 @@ export default function GlobalSettingsPage() {
           ))}
           {isAdding?(
             <div className="bg-white rounded-xl border border-emerald-300 shadow-sm p-5">
-              <h3 className="font-semibold text-slate-800 text-sm mb-1">Add New Entity / \u0625\u0636\u0627\u0641\u0629 \u0643\u064a\u0627\u0646 \u062c\u062f\u064a\u062f</h3>
+              <h3 className="font-semibold text-slate-800 text-sm mb-1">Add New Entity / إضافة كيان جديد</h3>
               <EntityForm entity={newEntity} onChange={makeChangeHandler(setNewEntity)} onLogoUpload={e=>handleLogoUpload(e,true)} logoRef={newLogoInputRef}/>
               <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-slate-100">
                 <button onClick={()=>setIsAdding(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
@@ -347,7 +347,7 @@ export default function GlobalSettingsPage() {
             </div>
           ):(
             <button onClick={()=>{setNewEntity(EMPTY_ENTITY());setIsAdding(true);}} className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors text-sm font-medium">
-              <Plus size={18}/> Add Entity / \u0625\u0636\u0627\u0641\u0629 \u0643\u064a\u0627\u0646
+              <Plus size={18}/> Add Entity / إضافة كيان
             </button>
           )}
         </div>
