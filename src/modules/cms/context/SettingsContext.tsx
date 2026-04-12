@@ -3,7 +3,9 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
 import { AppSettings, PartyOneEntity } from '../types';
 import { usePlatform } from '../../../core/context/PlatformContext';
+import { useGlobalSettings } from '../../../core/context/GlobalSettingsContext';
 
+// Fallback entity used only before GlobalSettings loads
 const DEFAULT_ENTITY: PartyOneEntity = {
   id: 'e1',
   name_ar: 'شركة دراية الذكية للتقنية',
@@ -49,27 +51,47 @@ const SettingsContext = createContext<SettingsContextType>({
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { user } = usePlatform();
-  const [settings, setSettingsState] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [settingsLoading, setSettingsLoading] = useState(true);
+  // Entities are sourced from GlobalSettings — the single source of truth since design
+  // unification. logo_base64, colors, bank details all live in platform_settings/global.
+  const { globalSettings, globalSettingsLoading } = useGlobalSettings();
+  const [vatRate, setVatRate] = useState(15);
+  const [cmsLoading, setCmsLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
-      setSettingsLoading(false);
+      setCmsLoading(false);
       return;
     }
-    getDoc(doc(db, 'cms_settings', 'entities'))
-      .then(snap => {
+    // Load CMS-only config (VAT rate). Try new path first, fall back to legacy path.
+    getDoc(doc(db, 'cms_settings', 'config'))
+      .then(async snap => {
         if (snap.exists()) {
-          setSettingsState(snap.data() as AppSettings);
+          setVatRate(snap.data().default_vat_rate ?? 15);
+        } else {
+          // Legacy backward-compat: old code stored full settings under 'entities' doc
+          const legacySnap = await getDoc(doc(db, 'cms_settings', 'entities'));
+          if (legacySnap.exists()) {
+            setVatRate(legacySnap.data().default_vat_rate ?? 15);
+          }
         }
       })
       .catch(err => console.error('[SettingsContext] load error:', err))
-      .finally(() => setSettingsLoading(false));
+      .finally(() => setCmsLoading(false));
   }, [user]);
 
+  // PlatformEntity is a superset of PartyOneEntity — safe structural cast.
+  const entities = globalSettings.entities as unknown as PartyOneEntity[];
+
+  const settings: AppSettings = {
+    entities: entities.length > 0 ? entities : [DEFAULT_ENTITY],
+    default_vat_rate: vatRate,
+  };
+
   const setSettings = async (s: AppSettings) => {
-    setSettingsState(s);
-    await setDoc(doc(db, 'cms_settings', 'entities'), s);
+    // Only persist CMS-specific settings (VAT rate).
+    // Entity data is managed via Platform Settings → GlobalSettingsPage.
+    setVatRate(s.default_vat_rate);
+    await setDoc(doc(db, 'cms_settings', 'config'), { default_vat_rate: s.default_vat_rate });
   };
 
   const getDefaultEntity = (): PartyOneEntity =>
@@ -79,7 +101,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     settings.entities.find(e => e.id === id);
 
   return (
-    <SettingsContext.Provider value={{ settings, settingsLoading, setSettings, getDefaultEntity, getEntityById }}>
+    <SettingsContext.Provider value={{
+      settings,
+      settingsLoading: globalSettingsLoading || cmsLoading,
+      setSettings,
+      getDefaultEntity,
+      getEntityById,
+    }}>
       {children}
     </SettingsContext.Provider>
   );
