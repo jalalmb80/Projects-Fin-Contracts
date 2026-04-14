@@ -20,30 +20,13 @@ const getDefaultArticles = (): Article[] => [
   { id: 'a1', order_index: 1, title_ar: 'التمهيد', body_ar: 'يعتبر التمهيد السابق والمقدمة إضافةً إلى الملاحق المرفقة جزءاً لا يتجزأ من هذا العقد ومتممةً ومفسرةً لأحكامه.', article_type: 'تمهيد', is_locked: true, is_visible: true },
   { id: 'a2', order_index: 2, title_ar: 'الموضوع', body_ar: '[عنوان العقد] لصالح الطرف الثاني ([اسم الطرف الثاني]) اعتماداً على العرض الفني المعتمد من قبل الطرفين والملحق مع هذا العقد.', article_type: 'موضوع', is_locked: false, is_visible: true },
   { id: 'a3', order_index: 3, title_ar: 'مدة التنفيذ', body_ar: 'يلتزم الطرف الأول بتنفيذ [عنوان العقد] لصالح الطرف الثاني خلال مدة لا تزيد عن ستة أشهر من تاريخ توقيع العقد من كلا الطرفين وتحويل الدفعة الأولى لحساب الطرف الأول.', article_type: 'مدة التنفيذ', is_locked: false, is_visible: true },
-  { id: 'a4', order_index: 4, title_ar: 'القيمة والدفعات', body_ar: 'تبلغ قيمة العقد الإجمالية المبلغ المحدد في جدول الدفعات أدناه شاملةً ضريبة القيمة المضافة.
-
-يلتزم الطرف الثاني بإيداع جميع المستحقات المالية للطرف الأول في حسابه في بنك البلاد باسم شركة دراية الذكية لتقنية المعلومات.
-
-في حال تأخر الطرف الثاني عن الرد خلال يومي عمل على مخاطبات الطرف الأول فلا تُحتسب المدة التي تزيد عن يومي العمل جزءاً من مدة التنفيذ.', article_type: 'القيمة والدفعات', is_locked: false, is_visible: true },
+  { id: 'a4', order_index: 4, title_ar: 'القيمة والدفعات', body_ar: `تبلغ قيمة العقد الإجمالية المبلغ المحدد في جدول الدفعات أدناه شاملةً ضريبة القيمة المضافة.\n\nيلتزم الطرف الثاني بإيداع جميع المستحقات المالية للطرف الأول في حسابه في بنك البلاد باسم شركة دراية الذكية لتقنية المعلومات.\n\nفي حال تأخر الطرف الثاني عن الرد خلال يومي عمل على مخاطبات الطرف الأول فلا تُحتسب المدة التي تزيد عن يومي العمل جزءاً من مدة التنفيذ.`, article_type: 'القيمة والدفعات', is_locked: false, is_visible: true },
   { id: 'a5', order_index: 5, title_ar: 'الملكية الفكرية', body_ar: 'الملكية الفكرية للمشروع بمكوناته المختلفة هي ملك للطرف الثاني ولا يحق للطرف الأول طلب أي حقوق ملكية عن مخرجات المشروع بعد استلام كامل المستحقات المالية.', article_type: 'الملكية الفكرية', is_locked: false, is_visible: true },
-  { id: 'a6', order_index: 6, title_ar: 'آلية إدارة المشروع والدعم الفني', body_ar: '١. بعد الاتفاق وتوقيع العقد وإيداع الدفعة الأولى، يُعيّن الطرف الثاني مديراً للمشروع ممثلاً له في هذا التعاقد.
-٢. يتم الاجتماع الأولي بين مدير المشروع الممثل للطرف الثاني ومدير المشروع الممثل للطرف الأول للاتفاق على آليات سير المشروع.
-٣. يتم توثيق جميع الخطوات والاتفاقات لضمان مصلحة طرفي المشروع.
-٤. يلتزم الطرف الثاني بإفادة الطرف الأول عن ملاحظاته حول الأعمال التي يتم تنفيذها في كل مرحلة خلال يومي عمل.', article_type: 'إدارة المشروع', is_locked: false, is_visible: true },
+  { id: 'a6', order_index: 6, title_ar: 'آلية إدارة المشروع والدعم الفني', body_ar: `١. بعد الاتفاق وتوقيع العقد وإيداع الدفعة الأولى، يُعيّن الطرف الثاني مديراً للمشروع ممثلاً له في هذا التعاقد.\n٢. يتم الاجتماع الأولي بين مدير المشروع الممثل للطرف الثاني ومدير المشروع الممثل للطرف الأول للاتفاق على آليات سير المشروع.\n٣. يتم توثيق جميع الخطوات والاتفاقات لضمان مصلحة طرفي المشروع.\n٤. يلتزم الطرف الثاني بإفادة الطرف الأول عن ملاحظاته حول الأعمال التي يتم تنفيذها في كل مرحلة خلال يومي عمل.`, article_type: 'إدارة المشروع', is_locked: false, is_visible: true },
   { id: 'a7', order_index: 7, title_ar: 'آلية طلبات التغيير', body_ar: 'في حالة قيام الطرف الثاني بطلب تعديل على نطاق العمل المتفق عليه، يقوم الطرف الثاني بالاجتماع مع الطرف الأول لشرح المتطلبات الجديدة، ويقوم الطرف الأول بتقييم المتطلبات وتحديد الجهد والتكلفة المطلوبتين لتنفيذ المتطلبات الجديدة، ولا يُعدّ أي طلب تغيير ملزماً إلا بعد توقيع ملحق تعديل من الطرفين.', article_type: 'طلبات التغيير', is_locked: false, is_visible: true },
-  { id: 'a8', order_index: 8, title_ar: 'إنهاء الاتفاقية', body_ar: 'تنتهي هذه الاتفاقية في الحالات التالية:
-١. باكتمال المشروع وتسليمه بشكل نهائي.
-٢. باتفاق الطرفين على إنهاء المشروع قبل تنفيذه لأسباب يتفق عليها الطرفان كتابياً.
-٣. يحق لكلا الطرفين إنهاء العقد إذا أخل الطرف الآخر ببنوده بعد إنذار كتابي لمدة لا تقل عن شهر.
-٤. إذا لم يلتزم الطرف الثاني بإيداع الدفعة خلال أسبوعين من تاريخ استحقاقها.', article_type: 'إنهاء الاتفاقية', is_locked: false, is_visible: true },
-  { id: 'a9', order_index: 9, title_ar: 'أحكام عامة', body_ar: '١. يلتزم الطرفان بالأحكام والضوابط الشرعية في تنفيذ الأعمال الفنية.
-٢. يُقر الطرفان بأنهما قد اطلعا على كل بنود ومحتوى هذا العقد وتفهماها وأدركا مقاصدها إدراكاً نافياً للجهالة والغرر.
-٣. يكون العنوان النظامي لكل طرف هو العنوان المبين في تمهيد هذا العقد.
-٤. لا يُعتدّ بتعديل أي شرط من شروط هذا العقد ما لم يكن مكتوباً بملحق وموقّعاً عليه من الطرفين.
-٥. يُعدّ هذا العقد ومالحقه نهائياً وملزماً للطرفين من تاريخ إبرام العقد وملغياً لأي عقد أو اتفاق سابق.', article_type: 'أحكام عامة', is_locked: true, is_visible: true },
-  { id: 'a10', order_index: 10, title_ar: 'نُسخ الاتفاقية', body_ar: 'حُرّير هذا العقد من عشرة بنود بنسختين أصليتين باللغة العربية، واستلم كل طرف نسخةً للعمل بموجبها، ويُعتبر توقيع الطرفين على هذا العقد إقراراً بصحته، وأن أي كشط أو تعديل غير متفق عليه من الطرفين يكون سبباً في إلغاء هذا العقد.
-وتوثيقاً لما تقدم فقد جرى التوقيع عليه في اليوم والسنة المبيَّنين في تمهيده.
-والله ولي التوفيق.', article_type: 'نسخ الاتفاقية', is_locked: true, is_visible: true },
+  { id: 'a8', order_index: 8, title_ar: 'إنهاء الاتفاقية', body_ar: `تنتهي هذه الاتفاقية في الحالات التالية:\n١. باكتمال المشروع وتسليمه بشكل نهائي.\n٢. باتفاق الطرفين على إنهاء المشروع قبل تنفيذه لأسباب يتفق عليها الطرفان كتابياً.\n٣. يحق لكلا الطرفين إنهاء العقد إذا أخل الطرف الآخر ببنوده بعد إنذار كتابي لمدة لا تقل عن شهر.\n٤. إذا لم يلتزم الطرف الثاني بإيداع الدفعة خلال أسبوعين من تاريخ استحقاقها.`, article_type: 'إنهاء الاتفاقية', is_locked: false, is_visible: true },
+  { id: 'a9', order_index: 9, title_ar: 'أحكام عامة', body_ar: `١. يلتزم الطرفان بالأحكام والضوابط الشرعية في تنفيذ الأعمال الفنية.\n٢. يُقر الطرفان بأنهما قد اطلعا على كل بنود ومحتوى هذا العقد وتفهماها وأدركا مقاصدها إدراكاً نافياً للجهالة والغرر.\n٣. يكون العنوان النظامي لكل طرف هو العنوان المبين في تمهيد هذا العقد.\n٤. لا يُعتدّ بتعديل أي شرط من شروط هذا العقد ما لم يكن مكتوباً بملحق وموقّعاً عليه من الطرفين.\n٥. يُعدّ هذا العقد ومالحقه نهائياً وملزماً للطرفين من تاريخ إبرام العقد وملغياً لأي عقد أو اتفاق سابق.`, article_type: 'أحكام عامة', is_locked: true, is_visible: true },
+  { id: 'a10', order_index: 10, title_ar: 'نُسخ الاتفاقية', body_ar: `حُرِّر هذا العقد من عشرة بنود بنسختين أصليتين باللغة العربية، واستلم كل طرف نسخةً للعمل بموجبها، ويُعتبر توقيع الطرفين على هذا العقد إقراراً بصحته، وأن أي كشط أو تعديل غير متفق عليه من الطرفين يكون سبباً في إلغاء هذا العقد.\nوتوثيقاً لما تقدم فقد جرى التوقيع عليه في اليوم والسنة المبيّنين في تمهيده.\nوالله ولي التوفيق.`, article_type: 'نسخ الاتفاقية', is_locked: true, is_visible: true },
 ];
 
 export default function ContractEditor({ contractId, onClose, contracts, setContracts, projects, clients, templates, setTemplates }: any) {
@@ -159,7 +142,6 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
             ? Math.max(...contract.versions.map((v: ContractVersion) => v.version_number))
             : 0;
 
-          // BUG-6 FIX: strip versions from snapshot to prevent recursive nesting
           const { versions: _v, ...contractWithoutVersions } = contract;
           const newVersion: ContractVersion = {
             version_number: lastVersion + 1,
@@ -172,7 +154,6 @@ export default function ContractEditor({ contractId, onClose, contracts, setCont
       }
       setContracts(contracts.map((c: Contract) => c.id === contract.id ? updatedContract : c));
     } else {
-      // BUG-6 FIX: strip versions from snapshot for initial version too
       const { versions: _v, ...contractWithoutVersions } = contract;
       const newVersion: ContractVersion = {
         version_number: 1,
@@ -742,7 +723,6 @@ function AttachmentsEditor({ contract, setContract, lang }: any) {
 function VersionsEditor({ contract, setContract, lang }: any) {
   const restoreVersion = (version: ContractVersion) => {
     if (confirm('هل أنت متأكد من استعادة هذا الإصدار؟ سيتم الكتابة فوق التعديلات الحالية.')) {
-      // Restore snapshot but keep current versions list
       setContract({ ...version.snapshot, versions: contract.versions });
     }
   };
@@ -784,7 +764,7 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
   const [driveStatus, setDriveStatus] = React.useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [driveLink, setDriveLink] = React.useState<string | null>(null);
   React.useEffect(() => { initGoogleDrive(); }, []);
-  const sanitizeFilename = (name: string) => name.replace(/[\/\\?%*:|"<>]/g, '-').trim();
+  const sanitizeFilename = (name: string) => name.replace(/[/\\?%*:|"<>]/g, '-').trim();
   const handleSaveToDrive = async () => {
     setDriveStatus('uploading'); setDriveLink(null);
     try {
