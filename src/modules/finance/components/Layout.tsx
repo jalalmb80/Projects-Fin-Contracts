@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useLang, t } from '../context/LanguageContext';
-import { 
+import {
   LayoutDashboard, Briefcase, FileText, Repeat, Users, Settings, LogOut,
   Menu, X, CreditCard, Package, Bell, Moon, Sun, ChevronLeft, ChevronRight, Globe
 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { cn } from '../lib/utils';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../../core/firebase';
 import { DocumentStatus, DocumentDirection, Currency } from '../types';
+import { format } from 'date-fns';
 
 export default function Layout() {
   const { user, billingDocuments, settings, updateSettings, displayCurrency, setDisplayCurrency } = useApp();
@@ -20,15 +21,15 @@ export default function Layout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const navigation = [
-    { name_en: 'Dashboard', name_ar: '\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645', href: '/finance/dashboard', icon: LayoutDashboard },
-    { name_en: 'Projects', name_ar: '\u0627\u0644\u0645\u0634\u0627\u0631\u064a\u0639', href: '/finance/projects', icon: Briefcase },
-    { name_en: 'Subscriptions', name_ar: '\u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643\u0627\u062a', href: '/finance/subscriptions', icon: Repeat },
-    { name_en: 'Billing', name_ar: '\u0627\u0644\u0641\u0648\u0627\u062a\u064a\u0631', href: '/finance/billing', icon: FileText },
-    { name_en: 'Payments', name_ar: '\u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0627\u062a', href: '/finance/payments', icon: CreditCard },
-    { name_en: 'Counterparties', name_ar: '\u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0648\u0627\u0644\u0645\u0648\u0631\u062f\u064a\u0646', href: '/finance/counterparties', icon: Users },
-    { name_en: 'Products', name_ar: '\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a', href: '/finance/products', icon: Package },
-    { name_en: 'Settings', name_ar: '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a', href: '/finance/settings', icon: Settings },
-    { name_en: 'Platform Settings', name_ar: '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629', href: '/finance/global-settings', icon: Globe },
+    { name_en: 'Dashboard',        name_ar: '\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645',              href: '/finance/dashboard',        icon: LayoutDashboard },
+    { name_en: 'Projects',         name_ar: '\u0627\u0644\u0645\u0634\u0627\u0631\u064a\u0639',                           href: '/finance/projects',         icon: Briefcase },
+    { name_en: 'Subscriptions',    name_ar: '\u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643\u0627\u062a',              href: '/finance/subscriptions',    icon: Repeat },
+    { name_en: 'Billing',          name_ar: '\u0627\u0644\u0641\u0648\u0627\u062a\u064a\u0631',                          href: '/finance/billing',          icon: FileText },
+    { name_en: 'Payments',         name_ar: '\u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0627\u062a',                   href: '/finance/payments',         icon: CreditCard },
+    { name_en: 'Counterparties',   name_ar: '\u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0648\u0627\u0644\u0645\u0648\u0631\u062f\u064a\u0646', href: '/finance/counterparties',   icon: Users },
+    { name_en: 'Products',         name_ar: '\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a',                          href: '/finance/products',         icon: Package },
+    { name_en: 'Settings',         name_ar: '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a',                   href: '/finance/settings',         icon: Settings },
+    { name_en: 'Platform Settings',name_ar: '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629', href: '/finance/global-settings',  icon: Globe },
   ];
 
   const handleLogout = async () => {
@@ -49,6 +50,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex" dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* Mobile menu toggle */}
       <div className={cn('lg:hidden fixed top-4 z-50', isRTL ? 'right-4' : 'left-4')}>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="p-2 rounded-md bg-slate-900 shadow-md text-slate-300 hover:text-white">
@@ -63,6 +65,7 @@ export default function Layout() {
         isMobileMenuOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full'),
         isSidebarCollapsed ? 'w-20' : 'w-64'
       )}>
+        {/* Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800">
           {!isSidebarCollapsed && <h1 className="text-xl font-bold text-white truncate">FinArchiTec</h1>}
           {isSidebarCollapsed && <h1 className="text-xl font-bold text-white mx-auto">FA</h1>}
@@ -74,6 +77,7 @@ export default function Layout() {
           </button>
         </div>
 
+        {/* Nav */}
         <div className="flex-1 overflow-y-auto py-4">
           <nav className="px-2 space-y-1">
             {navigation.map((item) => {
@@ -104,12 +108,14 @@ export default function Layout() {
           </nav>
         </div>
 
-        <div className="border-t border-slate-800 p-4">
+        {/* Footer: user + lang toggle + logout */}
+        <div className="border-t border-slate-800 p-4 space-y-3">
+          {/* User info */}
           {!isSidebarCollapsed ? (
-            <div className="flex items-center mb-4">
+            <div className="flex items-center">
               <div className="flex-shrink-0">
                 {user?.photoURL
-                  ? <img className="h-8 w-8 rounded-full" src={user.photoURL} alt="User avatar" />
+                  ? <img className="h-8 w-8 rounded-full" src={user.photoURL} alt="" />
                   : <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-primary-400 font-bold">{user?.email?.charAt(0).toUpperCase()}</div>}
               </div>
               <div className={cn('overflow-hidden', isRTL ? 'mr-3' : 'ml-3')}>
@@ -117,10 +123,25 @@ export default function Layout() {
               </div>
             </div>
           ) : (
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center">
               <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-primary-400 font-bold">{user?.email?.charAt(0).toUpperCase()}</div>
             </div>
           )}
+
+          {/* Language toggle */}
+          <button
+            onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
+            className={cn(
+              'w-full flex items-center px-2 py-2 text-sm font-medium text-slate-300 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors',
+              isSidebarCollapsed ? 'justify-center' : 'space-x-2 space-x-reverse'
+            )}
+            title={isSidebarCollapsed ? (lang === 'ar' ? 'English' : '\u0639\u0631\u0628\u064a') : undefined}
+          >
+            <Globe className={cn('h-5 w-5 flex-shrink-0', !isSidebarCollapsed && (isRTL ? 'ml-2' : 'mr-2'))} />
+            {!isSidebarCollapsed && <span>{lang === 'ar' ? 'English' : '\u0639\u0631\u0628\u064a'}</span>}
+          </button>
+
+          {/* Logout */}
           <button onClick={handleLogout}
             className={cn('w-full flex items-center px-2 py-2 text-sm font-medium text-red-400 rounded-md hover:bg-slate-800 transition-colors', isSidebarCollapsed ? 'justify-center' : '')}
             title={t('\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c', 'Sign out', lang)}>
@@ -143,11 +164,10 @@ export default function Layout() {
               : t('\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645', 'Dashboard', lang)}
           </h2>
           <div className="flex items-center space-x-4 space-x-reverse">
-            <button onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
-              className="flex items-center space-x-1 space-x-reverse px-3 py-1 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200">
-              <Globe size={16} />
-              <span>{lang === 'ar' ? 'English' : '\u0627\u0644\u0639\u0631\u0628\u064a\u0629'}</span>
-            </button>
+            {/* Date — inline, no wrapping */}
+            <span className="whitespace-nowrap text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-2">
+              {format(new Date(), lang === 'ar' ? 'd MMMM yyyy' : 'MMMM d, yyyy')}
+            </span>
             <button onClick={toggleCurrency}
               className="px-3 py-1 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200">
               {displayCurrency}

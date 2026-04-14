@@ -455,7 +455,7 @@ export default function ProjectDetailPage() {
                           
                           {milestone.status === MilestoneStatus.Invoiced && milestone.linkedInvoiceId && (
                             <Link 
-                              to={`/billing/${milestone.linkedInvoiceId}`} 
+                              to={`/finance/billing/${milestone.linkedInvoiceId}`}
                               className="text-indigo-600 hover:text-indigo-900"
                               title="View Invoice"
                             >
