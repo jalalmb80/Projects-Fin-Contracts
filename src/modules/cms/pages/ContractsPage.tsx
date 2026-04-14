@@ -5,27 +5,34 @@ import { useContracts } from '../hooks/useContracts';
 import { Contract, ContractTemplate } from '../types';
 
 export default function ContractsPage() {
-  const { 
-    contracts, 
-    clients, 
-    templates, 
+  const {
+    contracts,
+    clients,
+    templates,
     projects,
-    addContract, 
-    updateContract, 
-    addTemplate 
+    addContract,
+    updateContract,
+    addTemplate,
   } = useContracts();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
 
+  // Called by ContractEditor with the full mutated contracts array.
+  // We extract only the new/changed contract and forward it to Firestore.
   const handleSetContracts = (newContracts: Contract[]) => {
     if (editingId) {
-      const updated = newContracts.find(c => c.id === editingId);
+      // Edit path: find the updated version of the contract being edited
+      const updated = newContracts.find((c) => c.id === editingId);
       if (updated) {
         updateContract(editingId, updated);
       }
     } else {
-      const added = newContracts.find(c => !contracts.some(existing => existing.id === c.id));
+      // New contract path: find the contract whose id doesn't exist yet
+      // Use newContracts itself as the source of truth — the last element
+      // is always the newly added one because ContractEditor appends it.
+      const existingIds = new Set(contracts.map((c) => c.id));
+      const added = newContracts.find((c) => !existingIds.has(c.id));
       if (added) {
         addContract(added);
       }
@@ -33,7 +40,8 @@ export default function ContractsPage() {
   };
 
   const handleSetTemplates = (newTemplates: ContractTemplate[]) => {
-    const added = newTemplates.find(t => !templates.some(existing => existing.id === t.id));
+    const existingIds = new Set(templates.map((t) => t.id));
+    const added = newTemplates.find((t) => !existingIds.has(t.id));
     if (added) {
       addTemplate(added);
     }
@@ -43,7 +51,10 @@ export default function ContractsPage() {
     return (
       <ContractEditor
         contractId={editingId}
-        onClose={() => { setShowEditor(false); setEditingId(null); }}
+        onClose={() => {
+          setShowEditor(false);
+          setEditingId(null);
+        }}
         contracts={contracts}
         setContracts={handleSetContracts}
         projects={projects}
@@ -53,13 +64,19 @@ export default function ContractsPage() {
       />
     );
   }
-  
+
   return (
     <ContractsList
       contracts={contracts}
       clients={clients}
-      onEdit={(id: string) => { setEditingId(id); setShowEditor(true); }}
-      onCreate={() => { setEditingId(null); setShowEditor(true); }}
+      onEdit={(id: string) => {
+        setEditingId(id);
+        setShowEditor(true);
+      }}
+      onCreate={() => {
+        setEditingId(null);
+        setShowEditor(true);
+      }}
     />
   );
 }
