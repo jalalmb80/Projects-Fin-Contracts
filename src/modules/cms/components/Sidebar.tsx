@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, Users, Settings, Globe, Briefcase, FileCode2, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Settings, Globe, Briefcase, FileCode2, ChevronLeft, ChevronRight, LogOut, Database } from 'lucide-react';
 import { useLang, t } from '../context/LanguageContext';
 import { cn } from '../../finance/lib/utils';
 import { signOut } from 'firebase/auth';
@@ -93,6 +93,39 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Admin separator */}
+        {!isCollapsed && (
+          <div className="pt-3 pb-1">
+            <p className="px-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {t('\u0623\u062f\u0648\u0627\u062a', 'Admin', lang)}
+            </p>
+          </div>
+        )}
+        {isCollapsed && <div className="border-t border-slate-700 my-2" />}
+
+        {/* Seed link */}
+        <Link
+          to="/cms/admin/seed"
+          title={isCollapsed ? t('\u0625\u0639\u062f\u0627\u062f \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a', 'Seed Database', lang) : undefined}
+          className={cn(
+            'group flex items-center px-2 py-2 text-sm font-medium rounded-lg transition-colors',
+            location.pathname === '/cms/admin/seed'
+              ? 'bg-amber-600 text-white'
+              : 'text-amber-400 hover:bg-amber-900/20 border border-amber-800/30',
+            isCollapsed ? 'justify-center' : ''
+          )}
+        >
+          <Database
+            size={20}
+            className={cn(
+              'flex-shrink-0',
+              location.pathname === '/cms/admin/seed' ? 'text-white' : 'text-amber-400',
+              !isCollapsed && (isRTL ? 'ml-3' : 'mr-3')
+            )}
+          />
+          {!isCollapsed && t('\u0625\u0639\u062f\u0627\u062f \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a', 'Seed Database', lang)}
+        </Link>
       </nav>
 
       {/* Footer: lang toggle + logout */}
