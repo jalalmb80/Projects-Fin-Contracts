@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ContractsList from '../components/ContractsList';
 import ContractEditor from '../components/ContractEditor';
 import { useContracts } from '../hooks/useContracts';
 import { Contract, ContractTemplate } from '../types';
+import { useSearchParams } from 'react-router-dom';
 
 export default function ContractsPage() {
   const {
@@ -15,46 +16,42 @@ export default function ContractsPage() {
     addTemplate,
   } = useContracts();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
 
-  // Called by ContractEditor with the full mutated contracts array.
-  // We extract only the new/changed contract and forward it to Firestore.
+  // BUG-7 FIX: auto-open editor when navigated with ?new=1 (e.g. from dashboard)
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditingId(null);
+      setShowEditor(true);
+      // Remove the param so back-navigation doesn't re-open
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]);
+
   const handleSetContracts = (newContracts: Contract[]) => {
     if (editingId) {
-      // Edit path: find the updated version of the contract being edited
       const updated = newContracts.find((c) => c.id === editingId);
-      if (updated) {
-        updateContract(editingId, updated);
-      }
+      if (updated) updateContract(editingId, updated);
     } else {
-      // New contract path: find the contract whose id doesn't exist yet
-      // Use newContracts itself as the source of truth — the last element
-      // is always the newly added one because ContractEditor appends it.
       const existingIds = new Set(contracts.map((c) => c.id));
       const added = newContracts.find((c) => !existingIds.has(c.id));
-      if (added) {
-        addContract(added);
-      }
+      if (added) addContract(added);
     }
   };
 
   const handleSetTemplates = (newTemplates: ContractTemplate[]) => {
     const existingIds = new Set(templates.map((t) => t.id));
     const added = newTemplates.find((t) => !existingIds.has(t.id));
-    if (added) {
-      addTemplate(added);
-    }
+    if (added) addTemplate(added);
   };
 
   if (showEditor) {
     return (
       <ContractEditor
         contractId={editingId}
-        onClose={() => {
-          setShowEditor(false);
-          setEditingId(null);
-        }}
+        onClose={() => { setShowEditor(false); setEditingId(null); }}
         contracts={contracts}
         setContracts={handleSetContracts}
         projects={projects}
@@ -69,14 +66,8 @@ export default function ContractsPage() {
     <ContractsList
       contracts={contracts}
       clients={clients}
-      onEdit={(id: string) => {
-        setEditingId(id);
-        setShowEditor(true);
-      }}
-      onCreate={() => {
-        setEditingId(null);
-        setShowEditor(true);
-      }}
+      onEdit={(id: string) => { setEditingId(id); setShowEditor(true); }}
+      onCreate={() => { setEditingId(null); setShowEditor(true); }}
     />
   );
 }
