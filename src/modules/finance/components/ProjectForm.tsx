@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Project, ProjectStatus, ContractType, Currency, WBSItem, Milestone, MilestoneStatus } from '../types';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useLang, t } from '../context/LanguageContext';
 
 interface ProjectFormProps {
   initialData?: Project;
@@ -11,6 +12,7 @@ interface ProjectFormProps {
 
 export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFormProps) {
   const { counterparties } = useApp();
+  const { lang } = useLang();
   const [formData, setFormData] = useState<Omit<Project, 'id' | 'createdAt' | 'updatedAt'>>({
     name: '',
     description: '',
@@ -42,7 +44,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
     try {
       await onSave(formData);
     } catch (error) {
-      console.error("Error saving project:", error);
+      console.error('Error saving project:', error);
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
   const addMilestone = () => {
     const newMilestone: Milestone = {
       id: crypto.randomUUID(),
-      projectId: '', // Will be set on save or context
+      projectId: '',
       name: '',
       description: '',
       dueDate: new Date().toISOString().split('T')[0],
@@ -100,7 +102,6 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
       milestones: prev.milestones.map(item => {
         if (item.id !== id) return item;
         const updated = { ...item, [field]: value };
-        // Auto-calculate amount if percent changes
         if (field === 'percentOfContract') {
           updated.amount = (formData.contractValue * (value as number)) / 100;
         }
@@ -113,12 +114,18 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
     setFormData(prev => ({ ...prev, milestones: prev.milestones.filter(item => item.id !== id) }));
   };
 
+  const tabLabel = (tab: string) => {
+    if (tab === 'details') return t('التفاصيل', 'Details', lang);
+    if (tab === 'wbs') return 'WBS';
+    return t('المراحل', 'Milestones', lang);
+  };
+
   return (
     <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-medium text-gray-900">
-            {initialData ? 'Edit Project' : 'New Project'}
+            {initialData ? t('تعديل المشروع', 'Edit Project', lang) : t('مشروع جديد', 'New Project', lang)}
           </h2>
           <button onClick={onCancel} className="text-gray-400 hover:text-gray-500">
             <X size={24} />
@@ -127,17 +134,17 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
 
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex px-6 space-x-8">
-            {['details', 'wbs', 'milestones'].map((tab) => (
+            {(['details', 'wbs', 'milestones'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab as any)}
+                onClick={() => setActiveTab(tab)}
                 className={`${
                   activeTab === tab
                     ? 'border-indigo-500 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize`}
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
               >
-                {tab === 'wbs' ? 'WBS' : tab}
+                {tabLabel(tab)}
               </button>
             ))}
           </nav>
@@ -147,7 +154,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
           {activeTab === 'details' && (
             <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label htmlFor="name" className="form-label">Project Name *</label>
+                <label htmlFor="name" className="form-label">{t('اسم المشروع *', 'Project Name *', lang)}</label>
                 <input
                   type="text"
                   name="name"
@@ -160,7 +167,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
               </div>
 
               <div>
-                <label htmlFor="clientId" className="form-label">Client *</label>
+                <label htmlFor="clientId" className="form-label">{t('العميل *', 'Client *', lang)}</label>
                 <select
                   name="clientId"
                   id="clientId"
@@ -169,7 +176,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
                   onChange={handleChange}
                   className="form-input"
                 >
-                  <option value="">Select Client</option>
+                  <option value="">{t('اختر عميلاً', 'Select Client', lang)}</option>
                   {counterparties.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -177,7 +184,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
               </div>
 
               <div>
-                <label htmlFor="status" className="form-label">Status</label>
+                <label htmlFor="status" className="form-label">{t('الحالة', 'Status', lang)}</label>
                 <select
                   name="status"
                   id="status"
@@ -192,7 +199,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
               </div>
 
               <div>
-                <label htmlFor="contractType" className="form-label">Contract Type</label>
+                <label htmlFor="contractType" className="form-label">{t('نوع العقد', 'Contract Type', lang)}</label>
                 <select
                   name="contractType"
                   id="contractType"
@@ -200,14 +207,14 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
                   onChange={handleChange}
                   className="form-input"
                 >
-                  {Object.values(ContractType).map(t => (
-                    <option key={t} value={t}>{t}</option>
+                  {Object.values(ContractType).map(ct => (
+                    <option key={ct} value={ct}>{ct}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="baseCurrency" className="form-label">Currency</label>
+                <label htmlFor="baseCurrency" className="form-label">{t('العملة', 'Currency', lang)}</label>
                 <select
                   name="baseCurrency"
                   id="baseCurrency"
@@ -222,7 +229,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
               </div>
 
               <div>
-                <label htmlFor="contractValue" className="form-label">Contract Value</label>
+                <label htmlFor="contractValue" className="form-label">{t('قيمة العقد', 'Contract Value', lang)}</label>
                 <input
                   type="number"
                   name="contractValue"
@@ -236,7 +243,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
               </div>
 
               <div>
-                <label htmlFor="startDate" className="form-label">Start Date</label>
+                <label htmlFor="startDate" className="form-label">{t('تاريخ البداية', 'Start Date', lang)}</label>
                 <input
                   type="date"
                   name="startDate"
@@ -248,7 +255,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
               </div>
 
               <div>
-                <label htmlFor="endDate" className="form-label">End Date</label>
+                <label htmlFor="endDate" className="form-label">{t('تاريخ النهاية', 'End Date', lang)}</label>
                 <input
                   type="date"
                   name="endDate"
@@ -260,7 +267,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
               </div>
 
               <div className="sm:col-span-2">
-                <label htmlFor="description" className="form-label">Description</label>
+                <label htmlFor="description" className="form-label">{t('الوصف', 'Description', lang)}</label>
                 <textarea
                   name="description"
                   id="description"
@@ -276,28 +283,28 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
           {activeTab === 'wbs' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900">Work Breakdown Structure</h3>
+                <h3 className="text-lg font-medium text-gray-900">{t('هيكل تفصيل العمل', 'Work Breakdown Structure', lang)}</h3>
                 <button
                   type="button"
                   onClick={addWBSItem}
                   className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
                 >
                   <Plus className="-ml-0.5 mr-2 h-4 w-4" />
-                  Add Item
+                  {t('إضافة بند', 'Add Item', lang)}
                 </button>
               </div>
-              
+
               {formData.wbs.length === 0 ? (
-                <p className="text-gray-500 text-sm italic">No WBS items added yet.</p>
+                <p className="text-gray-500 text-sm italic">{t('لا توجد بنود حتى الآن.', 'No WBS items added yet.', lang)}</p>
               ) : (
                 <div className="space-y-3">
-                  {formData.wbs.map((item, index) => (
+                  {formData.wbs.map((item) => (
                     <div key={item.id} className="flex items-start space-x-3 bg-gray-50 p-3 rounded-md">
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-2">
                           <input
                             type="text"
-                            placeholder="Item Name"
+                            placeholder={t('اسم البند', 'Item Name', lang)}
                             value={item.name}
                             onChange={(e) => updateWBSItem(item.id, 'name', e.target.value)}
                             className="form-input"
@@ -306,7 +313,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
                         <div>
                           <input
                             type="number"
-                            placeholder="Budget"
+                            placeholder={t('الميزانية', 'Budget', lang)}
                             value={item.budget}
                             onChange={(e) => updateWBSItem(item.id, 'budget', parseFloat(e.target.value) || 0)}
                             className="form-input"
@@ -330,19 +337,19 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
           {activeTab === 'milestones' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900">Milestones</h3>
+                <h3 className="text-lg font-medium text-gray-900">{t('المراحل', 'Milestones', lang)}</h3>
                 <button
                   type="button"
                   onClick={addMilestone}
                   className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
                 >
                   <Plus className="-ml-0.5 mr-2 h-4 w-4" />
-                  Add Milestone
+                  {t('إضافة مرحلة', 'Add Milestone', lang)}
                 </button>
               </div>
 
               {formData.milestones.length === 0 ? (
-                <p className="text-gray-500 text-sm italic">No milestones added yet.</p>
+                <p className="text-gray-500 text-sm italic">{t('لا توجد مراحل حتى الآن.', 'No milestones added yet.', lang)}</p>
               ) : (
                 <div className="space-y-3">
                   {formData.milestones.map((item) => (
@@ -351,7 +358,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <input
                             type="text"
-                            placeholder="Milestone Name"
+                            placeholder={t('اسم المرحلة', 'Milestone Name', lang)}
                             value={item.name}
                             onChange={(e) => updateMilestone(item.id, 'name', e.target.value)}
                             className="form-input"
@@ -373,7 +380,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
-                          <label className="block text-xs text-gray-500">Percentage (%)</label>
+                          <label className="block text-xs text-gray-500">{t('النسبة (%)', 'Percentage (%)', lang)}</label>
                           <input
                             type="number"
                             min="0"
@@ -384,7 +391,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-gray-500">Amount</label>
+                          <label className="block text-xs text-gray-500">{t('المبلغ', 'Amount', lang)}</label>
                           <input
                             type="number"
                             value={item.amount}
@@ -393,7 +400,7 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-gray-500">Status</label>
+                          <label className="block text-xs text-gray-500">{t('الحالة', 'Status', lang)}</label>
                           <select
                             value={item.status}
                             onChange={(e) => updateMilestone(item.id, 'status', e.target.value)}
@@ -417,16 +424,16 @@ export default function ProjectForm({ initialData, onSave, onCancel }: ProjectFo
           <button
             type="button"
             onClick={onCancel}
-            className="btn-secondary"
+            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Cancel
+            {t('إلغاء', 'Cancel', lang)}
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="btn-primary"
+            className="inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? 'Saving...' : 'Save Project'}
+            {loading ? t('جارٍ الحفظ...', 'Saving...', lang) : t('حفظ المشروع', 'Save Project', lang)}
           </button>
         </div>
       </div>
