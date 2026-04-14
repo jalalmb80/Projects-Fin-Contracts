@@ -9,23 +9,40 @@ export default function TemplatesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
 
-  // Called by TemplateEditor.handleSave and TemplatesList (duplicate/delete)
+  /**
+   * Called by TemplateEditor.handleSave (passes full array) and
+   * TemplatesList (duplicate / delete actions).
+   *
+   * We resolve intent via showEditor + editingId (same pattern as ContractsPage):
+   *  - showEditor + editingId  -> edit save   -> updateTemplate
+   *  - showEditor + !editingId -> new save    -> addTemplate
+   *  - !showEditor             -> list action -> Set-diff to detect add or delete
+   */
   const handleSetTemplates = async (newTemplates: ContractTemplate[]) => {
-    if (newTemplates.length > templates.length) {
-      // New template added (duplicate action from TemplatesList)
-      const added = newTemplates[newTemplates.length - 1];
-      await addTemplate(added);
-    } else if (newTemplates.length < templates.length) {
-      // Template deleted
-      const deleted = templates.find(t => !newTemplates.find(n => n.id === t.id));
-      if (deleted) await deleteTemplate(deleted.id);
+    if (showEditor) {
+      if (editingId) {
+        // Edit save: find the changed template by id
+        const updated = newTemplates.find((n) => n.id === editingId);
+        if (updated) await updateTemplate(editingId, updated);
+      } else {
+        // New template save: find the id not yet in Firestore
+        const existingIds = new Set(templates.map((t) => t.id));
+        const added = newTemplates.find((n) => !existingIds.has(n.id));
+        if (added) await addTemplate(added);
+      }
     } else {
-      // Template updated (edit save from TemplateEditor)
-      const changed = newTemplates.find(n => {
-        const original = templates.find(t => t.id === n.id);
-        return original && JSON.stringify(original) !== JSON.stringify(n);
-      });
-      if (changed) await updateTemplate(changed.id, changed);
+      // List action: duplicate (add) or delete
+      const existingIds = new Set(templates.map((t) => t.id));
+      const newIds = new Set(newTemplates.map((n) => n.id));
+
+      const added = newTemplates.find((n) => !existingIds.has(n.id));
+      if (added) {
+        await addTemplate(added);
+        return;
+      }
+
+      const deleted = templates.find((t) => !newIds.has(t.id));
+      if (deleted) await deleteTemplate(deleted.id);
     }
   };
 
