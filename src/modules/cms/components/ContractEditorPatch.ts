@@ -1,4 +1,3 @@
-// This file is intentionally empty — it exists only to trigger a
-// rebuild when ContractEditor.tsx is patched in the same commit.
-// See the inline changes in ContractEditor.tsx for the client_id fix.
+// Marker file — intentional empty export.
+// The real fix is in ContractEditor.tsx MetadataEditor: client_id sync + placeholder option.
 export {};
