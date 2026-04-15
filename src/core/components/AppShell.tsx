@@ -5,6 +5,7 @@ import { MODULES } from '../registry';
 import ModuleSwitcher from './ModuleSwitcher';
 import LoginPage from '../pages/LoginPage';
 import GlobalSettingsPage from '../pages/GlobalSettingsPage';
+import SharedClientsPage from '../pages/SharedClientsPage';
 
 export default function AppShell() {
   const { user, loadingAuth } = usePlatform();
@@ -38,14 +39,12 @@ export default function AppShell() {
           <Routes>
             <Route path="/" element={<Navigate to="/finance/dashboard" replace />} />
             <Route path="/settings" element={<GlobalSettingsPage />} />
+            <Route path="/clients" element={<SharedClientsPage />} />
             {MODULES.map(mod => {
               const Component = mod.component;
               return (
                 <React.Fragment key={mod.id}>
-                  <Route
-                    path={`${mod.basePath}/*`}
-                    element={<Component />}
-                  />
+                  <Route path={`${mod.basePath}/*`} element={<Component />} />
                 </React.Fragment>
               );
             })}

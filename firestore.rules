@@ -2,12 +2,26 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Finance Collections
+    // ── Platform-wide shared ────────────────────────────────────────────────
+
+    // Unified customer/vendor directory — Finance, CMS, and all future modules.
+    // Replaces: counterparties (CUSTOMER/BOTH) + cms_clients
+    match /shared_clients/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Platform settings (entities, branding, language)
+    match /platform_settings/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ── Finance ─────────────────────────────────────────────────────────────
+
     match /projects/{document=**} {
       allow read, write: if isAuthenticated();
     }
@@ -20,9 +34,13 @@ service cloud.firestore {
     match /subscriptions/{document=**} {
       allow read, write: if isAuthenticated();
     }
+
+    // Legacy VENDOR-only counterparties — kept until a vendor module is built.
+    // CUSTOMER/BOTH records have been migrated to shared_clients.
     match /counterparties/{document=**} {
       allow read, write: if isAuthenticated();
     }
+
     match /products/{document=**} {
       allow read, write: if isAuthenticated();
     }
@@ -35,19 +53,22 @@ service cloud.firestore {
     match /transactions/{document=**} {
       allow read, write: if isAuthenticated();
     }
-
-    // App Settings
     match /appSettings/{document=**} {
       allow read, write: if isAuthenticated();
     }
 
-    // CMS Collections
+    // ── CMS ─────────────────────────────────────────────────────────────────
+
     match /cms_contracts/{document=**} {
       allow read, write: if isAuthenticated();
     }
+
+    // Kept during migration window only.
+    // Remove after all records are confirmed in shared_clients.
     match /cms_clients/{document=**} {
       allow read, write: if isAuthenticated();
     }
+
     match /cms_templates/{document=**} {
       allow read, write: if isAuthenticated();
     }
@@ -58,12 +79,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Platform-wide shared settings (entities, language, brand colors, bank details)
-    match /platform_settings/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // Default deny everything else
+    // ── Default deny ────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

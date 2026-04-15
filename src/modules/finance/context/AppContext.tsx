@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { db, auth } from '../../../core/firebase';
+import { useSharedClients } from '../../../core/hooks/useSharedClients';
 import { 
   Project, 
   BillingDocument, 
@@ -89,7 +90,7 @@ const initialState: AppState = {
     billingDocuments: true,
     payments: true,
     subscriptions: true,
-    counterparties: true,
+    counterparties: false, // sourced from useSharedClients — no onSnapshot here
     products: true,
     legalEntities: true,
     budgetCategories: true,
@@ -107,7 +108,6 @@ type AppAction =
   | { type: 'SET_DISPLAY_CURRENCY'; payload: Currency }
   | { type: 'SET_LOADING'; collection: keyof AppState['loading']; isLoading: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
-  // Optimistic updates for non-realtime collections
   | { type: 'ADD_ITEM'; collection: 'products' | 'legalEntities' | 'budgetCategories'; payload: any }
   | { type: 'UPDATE_ITEM'; collection: 'products' | 'legalEntities' | 'budgetCategories'; payload: any }
   | { type: 'DELETE_ITEM'; collection: 'products' | 'legalEntities' | 'budgetCategories'; id: string };
@@ -131,10 +131,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_ERROR':
       return { ...state, error: action.payload };
     case 'ADD_ITEM':
-      return {
-        ...state,
-        [action.collection]: [...(state[action.collection] as any[]), action.payload]
-      };
+      return { ...state, [action.collection]: [...(state[action.collection] as any[]), action.payload] };
     case 'UPDATE_ITEM':
       return {
         ...state,
@@ -155,7 +152,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
 // --- Context ---
 
 interface AppContextType extends AppState {
-  // Projects
   addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
@@ -163,8 +159,6 @@ interface AppContextType extends AppState {
   updateMilestone: (projectId: string, milestoneId: string, data: Partial<Milestone>) => Promise<void>;
   deleteMilestone: (projectId: string, milestoneId: string) => Promise<void>;
   completeMilestone: (projectId: string, milestoneId: string) => Promise<void>;
-  
-  // Billing Documents
   addBillingDocument: (doc: Omit<BillingDocument, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateBillingDocument: (id: string, data: Partial<BillingDocument>) => Promise<void>;
   issueDocument: (id: string) => Promise<void>;
@@ -173,42 +167,26 @@ interface AppContextType extends AppState {
   markAsSent: (id: string) => Promise<void>;
   voidDocument: (id: string) => Promise<void>;
   returnToDraft: (id: string) => Promise<void>;
-  
-  // Payments
   recordPayment: (payment: Omit<Payment, 'id' | 'createdAt'>) => Promise<void>;
   allocatePayment: (paymentId: string, invoiceId: string, amount: number) => Promise<void>;
-  
-  // Subscriptions
   addSubscription: (sub: Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateSubscription: (id: string, data: Partial<Subscription>) => Promise<void>;
   deleteSubscription: (id: string) => Promise<void>;
   runBillingJob: () => Promise<void>;
-  
-  // Counterparties
   addCounterparty: (cp: Omit<Counterparty, 'id' | 'createdAt'>) => Promise<void>;
   updateCounterparty: (id: string, data: Partial<Counterparty>) => Promise<void>;
   deleteCounterparty: (id: string) => Promise<void>;
-  
-  // Products
   addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
   updateProduct: (id: string, data: Partial<Product>) => Promise<void>;
   softDeleteProduct: (id: string) => Promise<void>;
-  
-  // Legal Entities
   addLegalEntity: (entity: Omit<LegalEntity, 'id'>) => Promise<void>;
   updateLegalEntity: (id: string, data: Partial<LegalEntity>) => Promise<void>;
   deleteLegalEntity: (id: string) => Promise<void>;
-  
-  // Budget Categories
   addBudgetCategory: (category: Omit<BudgetCategory, 'id'>) => Promise<void>;
   updateBudgetCategory: (id: string, data: Partial<BudgetCategory>) => Promise<void>;
   deleteBudgetCategory: (id: string) => Promise<void>;
-  
-  // Settings
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
   setDisplayCurrency: (currency: Currency) => void;
-  
-  // Helpers
   formatMoney: (amount: number, fromCurrency?: Currency) => string;
   convert: (amount: number, from: Currency, to: Currency) => number;
 }
@@ -227,6 +205,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { addToast } = useToast();
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  // Counterparties now sourced from shared_clients via useSharedClients.
+  // Finance sees CUSTOMER | BOTH | INTERCOMPANY records, shaped like old Counterparty[].
+  // VENDOR-only records remain in /counterparties (legacy) until a vendor module is built.
+  const { asFinanceCounterparties } = useSharedClients();
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -239,7 +222,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!state.user) return;
 
-    // Real-time Listeners
     const unsubProjects = onSnapshot(
       query(collection(db, 'projects'), orderBy('createdAt', 'desc')),
       (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'projects', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
@@ -276,15 +258,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    const unsubCounterparties = onSnapshot(
-      query(collection(db, 'counterparties'), orderBy('name')),
-      (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'counterparties', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
-      (error) => {
-        console.error(`[counterparties] snapshot error:`, error.code);
-        dispatch({ type: 'SET_LOADING', collection: 'counterparties', isLoading: false });
-      }
-    );
-
     // One-time Fetches
     const fetchOneTimeData = async () => {
       try {
@@ -301,12 +274,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (settingsDoc.exists()) {
           dispatch({ type: 'SET_SETTINGS', payload: settingsDoc.data() as AppSettings });
         } else {
-          // Seed defaults if missing
           await setDoc(doc(db, 'appSettings', 'config'), INITIAL_SETTINGS);
           dispatch({ type: 'SET_SETTINGS', payload: INITIAL_SETTINGS });
         }
       } catch (error) {
-        console.error("Error fetching initial data:", error);
+        console.error('Error fetching initial data:', error);
         dispatch({ type: 'SET_ERROR', payload: 'Failed to load application data.' });
       }
     };
@@ -318,7 +290,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       unsubBilling();
       unsubPayments();
       unsubSubscriptions();
-      unsubCounterparties();
     };
   }, [state.user]);
 
@@ -329,334 +300,208 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // --- CRUD Implementations ---
 
-  // Projects
   const addProject = async (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'projects', id), { ...project, id, createdAt: now(), updatedAt: now() });
       addToast('success', 'Project created successfully');
-    } catch (error) {
-      addToast('error', 'Failed to create project');
-      throw error;
-    }
+    } catch (error) { addToast('error', 'Failed to create project'); throw error; }
   };
 
   const updateProject = async (id: string, data: Partial<Project>) => {
     try {
       await updateDoc(doc(db, 'projects', id), { ...data, updatedAt: now() });
       addToast('success', 'Project updated successfully');
-    } catch (error) {
-      addToast('error', 'Failed to update project');
-      throw error;
-    }
+    } catch (error) { addToast('error', 'Failed to update project'); throw error; }
   };
 
   const deleteProject = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'projects', id));
       addToast('success', 'Project deleted successfully');
-    } catch (error) {
-      addToast('error', 'Failed to delete project');
-      throw error;
-    }
+    } catch (error) { addToast('error', 'Failed to delete project'); throw error; }
   };
 
   const addMilestone = async (projectId: string, milestone: Omit<Milestone, 'id' | 'projectId'>) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
-      
       const newMilestone = { ...milestone, id: generateId(), projectId };
-      const updatedMilestones = [...project.milestones, newMilestone];
-      
       await updateDoc(doc(db, 'projects', projectId), { 
-        milestones: updatedMilestones,
-        updatedAt: now()
+        milestones: [...project.milestones, newMilestone], updatedAt: now()
       });
       addToast('success', 'Milestone added');
-    } catch (error) {
-      addToast('error', 'Failed to add milestone');
-    }
+    } catch (error) { addToast('error', 'Failed to add milestone'); }
   };
 
   const updateMilestone = async (projectId: string, milestoneId: string, data: Partial<Milestone>) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
-      
-      const updatedMilestones = project.milestones.map(m => 
-        m.id === milestoneId ? { ...m, ...data } : m
-      );
-      
       await updateDoc(doc(db, 'projects', projectId), { 
-        milestones: updatedMilestones,
+        milestones: project.milestones.map(m => m.id === milestoneId ? { ...m, ...data } : m),
         updatedAt: now()
       });
       addToast('success', 'Milestone updated');
-    } catch (error) {
-      addToast('error', 'Failed to update milestone');
-    }
+    } catch (error) { addToast('error', 'Failed to update milestone'); }
   };
 
   const deleteMilestone = async (projectId: string, milestoneId: string) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
-      
-      const updatedMilestones = project.milestones.filter(m => m.id !== milestoneId);
-      
       await updateDoc(doc(db, 'projects', projectId), { 
-        milestones: updatedMilestones,
-        updatedAt: now()
+        milestones: project.milestones.filter(m => m.id !== milestoneId), updatedAt: now()
       });
       addToast('success', 'Milestone deleted');
-    } catch (error) {
-      addToast('error', 'Failed to delete milestone');
-    }
+    } catch (error) { addToast('error', 'Failed to delete milestone'); }
   };
 
   const completeMilestone = async (projectId: string, milestoneId: string) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
-      
       const milestone = project.milestones.find(m => m.id === milestoneId);
       if (!milestone) throw new Error('Milestone not found');
-
       const batch = writeBatch(db);
-
-      // 2. Create Invoice Draft
       const invoiceId = generateId();
-
-      // 1. Update Project Milestone Status
-      const updatedMilestones = project.milestones.map(m => 
-        m.id === milestoneId ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId } : m
-      );
-      batch.update(doc(db, 'projects', projectId), { milestones: updatedMilestones, updatedAt: now() });
-
+      batch.update(doc(db, 'projects', projectId), {
+        milestones: project.milestones.map(m => 
+          m.id === milestoneId ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId } : m
+        ), updatedAt: now()
+      });
       const lineItem: BillingLineItem = {
-        id: generateId(),
-        description: `Milestone: ${milestone.name}`,
-        quantity: 1,
-        unitPrice: milestone.amount,
-        taxCode: TaxProfile.Standard,
-        taxAmount: milestone.amount * 0.15, // Assuming 15% standard
-        subtotal: milestone.amount,
-        total: milestone.amount * 1.15,
-        milestoneId: milestone.id
+        id: generateId(), description: `Milestone: ${milestone.name}`, quantity: 1,
+        unitPrice: milestone.amount, taxCode: TaxProfile.Standard,
+        taxAmount: milestone.amount * 0.15, subtotal: milestone.amount,
+        total: milestone.amount * 1.15, milestoneId: milestone.id
       };
-
       const newInvoice: BillingDocument = {
-        id: invoiceId,
-        type: DocumentType.Invoice,
-        direction: DocumentDirection.AR,
-        status: DocumentStatus.Draft,
-        date: now().split('T')[0],
+        id: invoiceId, type: DocumentType.Invoice, direction: DocumentDirection.AR,
+        status: DocumentStatus.Draft, date: now().split('T')[0],
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         counterpartyId: project.clientId,
-        counterpartyName: state.counterparties.find(c => c.id === project.clientId)?.name || 'Unknown',
-        projectId: project.id,
-        milestoneId: milestone.id,
-        currency: project.baseCurrency,
-        exchangeRate: 1,
-        lines: [lineItem],
-        subtotal: lineItem.subtotal,
-        taxTotal: lineItem.taxAmount,
-        total: lineItem.total,
-        balance: lineItem.total,
-        paidAmount: 0,
-        taxProfile: TaxProfile.Standard,
-        createdAt: now(),
-        updatedAt: now()
+        counterpartyName: asFinanceCounterparties.find(c => c.id === project.clientId)?.name || 'Unknown',
+        projectId: project.id, milestoneId: milestone.id,
+        currency: project.baseCurrency, exchangeRate: 1, lines: [lineItem],
+        subtotal: lineItem.subtotal, taxTotal: lineItem.taxAmount, total: lineItem.total,
+        balance: lineItem.total, paidAmount: 0, taxProfile: TaxProfile.Standard,
+        createdAt: now(), updatedAt: now()
       };
-
       batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
-
       await batch.commit();
       addToast('success', 'Milestone completed — invoice draft created');
-    } catch (error) {
-      console.error(error);
-      addToast('error', 'Failed to complete milestone');
-    }
+    } catch (error) { console.error(error); addToast('error', 'Failed to complete milestone'); }
   };
 
-  // Billing Documents
   const addBillingDocument = async (docData: Omit<BillingDocument, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'billingDocuments', id), { ...docData, id, createdAt: now(), updatedAt: now() });
       addToast('success', 'Document created');
-    } catch (error) {
-      addToast('error', 'Failed to create document');
-    }
+    } catch (error) { addToast('error', 'Failed to create document'); }
   };
 
   const updateBillingDocument = async (id: string, data: Partial<BillingDocument>) => {
     try {
       await updateDoc(doc(db, 'billingDocuments', id), { ...data, updatedAt: now() });
       addToast('success', 'Document updated');
-    } catch (error) {
-      addToast('error', 'Failed to update document');
-    }
+    } catch (error) { addToast('error', 'Failed to update document'); }
   };
 
   const issueDocument = async (id: string) => {
     try {
       const document = state.billingDocuments.find(d => d.id === id);
       if (!document) throw new Error('Document not found');
-
       const prefix = state.settings.invoicePrefix;
       const year = new Date().getFullYear();
-
       const newSequence = await runTransaction(db, async (transaction) => {
         const counterRef = doc(db, 'appSettings', 'invoiceCounter');
         const counterDoc = await transaction.get(counterRef);
-        
-        let lastSequence = 0;
-        if (counterDoc.exists()) {
-          lastSequence = counterDoc.data().lastSequence || 0;
-        }
-        
+        const lastSequence = counterDoc.exists() ? (counterDoc.data().lastSequence || 0) : 0;
         const nextSequence = lastSequence + 1;
         transaction.set(counterRef, { lastSequence: nextSequence }, { merge: true });
-        
         return nextSequence;
       });
-
-      const sequenceStr = newSequence.toString().padStart(4, '0');
-      const documentNumber = `${prefix}${year}-${sequenceStr}`;
-
+      const documentNumber = `${prefix}${year}-${newSequence.toString().padStart(4, '0')}`;
       const batch = writeBatch(db);
-
-      // 1. Update Document
-      batch.update(doc(db, 'billingDocuments', id), {
-        status: DocumentStatus.Issued,
-        documentNumber,
-        updatedAt: now()
-      });
-
-      // 2. Create Transaction if linked to project
+      batch.update(doc(db, 'billingDocuments', id), { status: DocumentStatus.Issued, documentNumber, updatedAt: now() });
       if (document.projectId) {
         const transactionId = generateId();
         const transactionObj: Transaction = {
-          id: transactionId,
-          date: now(),
-          amount: document.total,
-          currency: document.currency,
-          description: `Invoice Issued: ${documentNumber}`,
-          referenceId: document.id,
+          id: transactionId, date: now(), amount: document.total, currency: document.currency,
+          description: `Invoice Issued: ${documentNumber}`, referenceId: document.id,
           type: document.direction === DocumentDirection.AR ? 'CREDIT' : 'DEBIT',
-          category: 'Accounts Receivable',
-          createdAt: now()
+          category: 'Accounts Receivable', createdAt: now()
         };
         batch.set(doc(db, 'transactions', transactionId), transactionObj);
       }
-
       await batch.commit();
       addToast('success', `Document issued: ${documentNumber}`);
-    } catch (error) {
-      console.error(error);
-      addToast('error', 'Failed to issue document');
-    }
+    } catch (error) { console.error(error); addToast('error', 'Failed to issue document'); }
   };
 
   const submitForApproval = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.PendingApproval });
-  const approveDocument = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Approved });
-  const markAsSent = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Sent });
-  const voidDocument = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Void });
-  const returnToDraft = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Draft });
+  const approveDocument  = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Approved });
+  const markAsSent       = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Sent });
+  const voidDocument     = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Void });
+  const returnToDraft    = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Draft });
 
-  // Payments
   const recordPayment = async (payment: Omit<Payment, 'id' | 'createdAt'>) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'payments', id), { ...payment, id, createdAt: now() });
       addToast('success', 'Payment recorded');
-    } catch (error) {
-      addToast('error', 'Failed to record payment');
-    }
+    } catch (error) { addToast('error', 'Failed to record payment'); }
   };
 
   const allocatePayment = async (paymentId: string, invoiceId: string, amount: number) => {
     try {
       const payment = state.payments.find(p => p.id === paymentId);
       const invoice = state.billingDocuments.find(d => d.id === invoiceId);
-
       if (!payment) throw new Error('Payment not found');
       if (!invoice) throw new Error('Invoice not found');
-
       if (payment.unallocatedAmount < amount) throw new Error('Insufficient unallocated amount');
       if (invoice.balance < amount) throw new Error('Allocation amount exceeds invoice balance');
-
       const batch = writeBatch(db);
-
-      // 1. Update Payment
-      const newAllocation = {
-        id: generateId(),
-        paymentId,
-        invoiceId,
-        amount,
-        date: now()
-      };
-      
+      const newAllocation = { id: generateId(), paymentId, invoiceId, amount, date: now() };
       batch.update(doc(db, 'payments', paymentId), {
         allocations: [...(payment.allocations || []), newAllocation],
         unallocatedAmount: payment.unallocatedAmount - amount
       });
-
-      // 2. Update Invoice
       const newPaidAmount = invoice.paidAmount + amount;
       const newBalance = invoice.total - newPaidAmount;
       let newStatus = invoice.status;
-      
-      if (newBalance <= 0) {
-        newStatus = DocumentStatus.Paid;
-      } else if (newPaidAmount > 0) {
-        newStatus = DocumentStatus.PartiallyPaid;
-      }
-
+      if (newBalance <= 0) newStatus = DocumentStatus.Paid;
+      else if (newPaidAmount > 0) newStatus = DocumentStatus.PartiallyPaid;
       batch.update(doc(db, 'billingDocuments', invoiceId), {
-        paidAmount: newPaidAmount,
-        balance: newBalance,
-        status: newStatus,
-        updatedAt: now()
+        paidAmount: newPaidAmount, balance: newBalance, status: newStatus, updatedAt: now()
       });
-
       await batch.commit();
       addToast('success', 'Payment allocated');
-    } catch (error) {
-      console.error(error);
-      addToast('error', 'Failed to allocate payment');
-    }
+    } catch (error) { console.error(error); addToast('error', 'Failed to allocate payment'); }
   };
 
-  // Subscriptions
   const addSubscription = async (sub: Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'subscriptions', id), { ...sub, id, createdAt: now(), updatedAt: now() });
       addToast('success', 'Subscription created');
-    } catch (error) {
-      addToast('error', 'Failed to create subscription');
-    }
+    } catch (error) { addToast('error', 'Failed to create subscription'); }
   };
 
   const updateSubscription = async (id: string, data: Partial<Subscription>) => {
     try {
       await updateDoc(doc(db, 'subscriptions', id), { ...data, updatedAt: now() });
       addToast('success', 'Subscription updated');
-    } catch (error) {
-      addToast('error', 'Failed to update subscription');
-    }
+    } catch (error) { addToast('error', 'Failed to update subscription'); }
   };
 
   const deleteSubscription = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'subscriptions', id));
       addToast('success', 'Subscription deleted');
-    } catch (error) {
-      addToast('error', 'Failed to delete subscription');
-    }
+    } catch (error) { addToast('error', 'Failed to delete subscription'); }
   };
 
   const runBillingJob = async () => {
@@ -665,111 +510,71 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const dueSubscriptions = state.subscriptions.filter(s => 
         s.status === SubscriptionStatus.Active && s.nextInvoiceDate <= today
       );
-
-      if (dueSubscriptions.length === 0) {
-        addToast('success', 'No subscriptions due for billing');
-        return;
-      }
-
+      if (dueSubscriptions.length === 0) { addToast('success', 'No subscriptions due for billing'); return; }
       const batch = writeBatch(db);
       let count = 0;
-
       for (const sub of dueSubscriptions) {
-        // 1. Create Invoice
         const invoiceId = generateId();
         const lines: BillingLineItem[] = sub.items.map(item => ({
-          id: generateId(),
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          taxCode: item.taxCode,
+          id: generateId(), description: item.description, quantity: item.quantity,
+          unitPrice: item.unitPrice, taxCode: item.taxCode,
           taxAmount: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 0.15 : 0),
           subtotal: item.quantity * item.unitPrice,
           total: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 1.15 : 1)
         }));
-
         const subtotal = lines.reduce((s, l) => s + l.subtotal, 0);
         const taxTotal = lines.reduce((s, l) => s + l.taxAmount, 0);
         const total = subtotal + taxTotal;
-
         const newInvoice: BillingDocument = {
-          id: invoiceId,
-          type: DocumentType.Invoice,
+          id: invoiceId, type: DocumentType.Invoice,
           direction: sub.direction === 'AR' ? DocumentDirection.AR : DocumentDirection.AP,
-          status: DocumentStatus.Draft,
-          date: today,
+          status: DocumentStatus.Draft, date: today,
           dueDate: new Date(Date.now() + sub.paymentTermsDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           counterpartyId: sub.counterpartyId,
-          counterpartyName: state.counterparties.find(c => c.id === sub.counterpartyId)?.name || 'Unknown',
-          subscriptionId: sub.id,
-          currency: sub.currency,
-          exchangeRate: 1,
-          lines,
-          subtotal,
-          taxTotal,
-          total,
-          balance: total,
-          paidAmount: 0,
-          taxProfile: TaxProfile.Standard,
-          createdAt: now(),
-          updatedAt: now()
+          counterpartyName: asFinanceCounterparties.find(c => c.id === sub.counterpartyId)?.name || 'Unknown',
+          subscriptionId: sub.id, currency: sub.currency, exchangeRate: 1, lines,
+          subtotal, taxTotal, total, balance: total, paidAmount: 0,
+          taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now()
         };
-
         batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
-
-        // 2. Update Subscription Dates
         const nextDate = new Date(sub.nextInvoiceDate);
         if (sub.billingCycle === 'Monthly') nextDate.setMonth(nextDate.getMonth() + 1);
         else if (sub.billingCycle === 'Quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
         else if (sub.billingCycle === 'Yearly') nextDate.setFullYear(nextDate.getFullYear() + 1);
-        
         batch.update(doc(db, 'subscriptions', sub.id), {
-          lastInvoiceDate: today,
-          nextInvoiceDate: nextDate.toISOString().split('T')[0],
-          updatedAt: now()
+          lastInvoiceDate: today, nextInvoiceDate: nextDate.toISOString().split('T')[0], updatedAt: now()
         });
-
         count++;
       }
-
       await batch.commit();
       addToast('success', `Billing job completed. Generated ${count} invoices.`);
-    } catch (error) {
-      console.error(error);
-      addToast('error', 'Billing job failed');
-    }
+    } catch (error) { console.error(error); addToast('error', 'Billing job failed'); }
   };
 
-  // Counterparties
+  // Counterparties — write to /counterparties (VENDOR-only legacy)
+  // Customer CRUD should go through SharedClientsPage (/clients route).
   const addCounterparty = async (cp: Omit<Counterparty, 'id' | 'createdAt'>) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'counterparties', id), { ...cp, id, createdAt: now() });
       addToast('success', 'Counterparty added');
-    } catch (error) {
-      addToast('error', 'Failed to add counterparty');
-    }
+    } catch (error) { addToast('error', 'Failed to add counterparty'); }
   };
 
   const updateCounterparty = async (id: string, data: Partial<Counterparty>) => {
     try {
       await updateDoc(doc(db, 'counterparties', id), data);
       addToast('success', 'Counterparty updated');
-    } catch (error) {
-      addToast('error', 'Failed to update counterparty');
-    }
+    } catch (error) { addToast('error', 'Failed to update counterparty'); }
   };
 
   const deleteCounterparty = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'counterparties', id));
       addToast('success', 'Counterparty deleted');
-    } catch (error) {
-      addToast('error', 'Failed to delete counterparty');
-    }
+    } catch (error) { addToast('error', 'Failed to delete counterparty'); }
   };
 
-  // Products (Non-realtime, Optimistic)
   const addProduct = async (product: Omit<Product, 'id' | 'createdAt'>) => {
     const id = generateId();
     const newProduct = { ...product, id, createdAt: now() };
@@ -778,7 +583,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       await setDoc(doc(db, 'products', id), newProduct);
       addToast('success', 'Product added');
     } catch (error) {
-      dispatch({ type: 'DELETE_ITEM', collection: 'products', id }); // Rollback
+      dispatch({ type: 'DELETE_ITEM', collection: 'products', id });
       addToast('error', 'Failed to add product');
     }
   };
@@ -790,111 +595,79 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       await updateDoc(doc(db, 'products', id), data);
       addToast('success', 'Product updated');
     } catch (error) {
-      if (original) dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: original }); // Rollback
+      if (original) dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: original });
       addToast('error', 'Failed to update product');
     }
   };
 
   const softDeleteProduct = async (id: string) => updateProduct(id, { active: false });
 
-  // Legal Entities
   const addLegalEntity = async (entity: Omit<LegalEntity, 'id'>) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'legalEntities', id), { ...entity, id });
       addToast('success', 'Legal entity added');
-    } catch (error) {
-      addToast('error', 'Failed to add legal entity');
-    }
+    } catch (error) { addToast('error', 'Failed to add legal entity'); }
   };
 
   const updateLegalEntity = async (id: string, data: Partial<LegalEntity>) => {
-    try {
-      await updateDoc(doc(db, 'legalEntities', id), data);
-      addToast('success', 'Legal entity updated');
-    } catch (error) {
-      addToast('error', 'Failed to update legal entity');
-    }
+    try { await updateDoc(doc(db, 'legalEntities', id), data); addToast('success', 'Legal entity updated'); }
+    catch (error) { addToast('error', 'Failed to update legal entity'); }
   };
 
   const deleteLegalEntity = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'legalEntities', id));
-      addToast('success', 'Legal entity deleted');
-    } catch (error) {
-      addToast('error', 'Failed to delete legal entity');
-    }
+    try { await deleteDoc(doc(db, 'legalEntities', id)); addToast('success', 'Legal entity deleted'); }
+    catch (error) { addToast('error', 'Failed to delete legal entity'); }
   };
 
-  // Budget Categories
   const addBudgetCategory = async (category: Omit<BudgetCategory, 'id'>) => {
     try {
       const id = generateId();
       await setDoc(doc(db, 'budgetCategories', id), { ...category, id });
       addToast('success', 'Budget category added');
-    } catch (error) {
-      addToast('error', 'Failed to add budget category');
-    }
+    } catch (error) { addToast('error', 'Failed to add budget category'); }
   };
 
   const updateBudgetCategory = async (id: string, data: Partial<BudgetCategory>) => {
-    try {
-      await updateDoc(doc(db, 'budgetCategories', id), data);
-      addToast('success', 'Budget category updated');
-    } catch (error) {
-      addToast('error', 'Failed to update budget category');
-    }
+    try { await updateDoc(doc(db, 'budgetCategories', id), data); addToast('success', 'Budget category updated'); }
+    catch (error) { addToast('error', 'Failed to update budget category'); }
   };
 
   const deleteBudgetCategory = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'budgetCategories', id));
-      addToast('success', 'Budget category deleted');
-    } catch (error) {
-      addToast('error', 'Failed to delete budget category');
-    }
+    try { await deleteDoc(doc(db, 'budgetCategories', id)); addToast('success', 'Budget category deleted'); }
+    catch (error) { addToast('error', 'Failed to delete budget category'); }
   };
 
-  // Settings
   const updateSettings = async (settings: Partial<AppSettings>) => {
     const original = state.settings;
     const newSettings = { ...original, ...settings };
     dispatch({ type: 'SET_SETTINGS', payload: newSettings });
-    try {
-      await updateDoc(doc(db, 'appSettings', 'config'), settings);
-      addToast('success', 'Settings updated');
-    } catch (error) {
-      dispatch({ type: 'SET_SETTINGS', payload: original });
-      addToast('error', 'Failed to update settings');
-    }
+    try { await updateDoc(doc(db, 'appSettings', 'config'), settings); addToast('success', 'Settings updated'); }
+    catch (error) { dispatch({ type: 'SET_SETTINGS', payload: original }); addToast('error', 'Failed to update settings'); }
   };
 
   const setDisplayCurrency = (currency: Currency) => {
     dispatch({ type: 'SET_DISPLAY_CURRENCY', payload: currency });
   };
 
-  // --- Currency Helpers ---
-
   const convert = (amount: number, from: Currency, to: Currency): number => {
     if (from === to) return amount;
-    if (from === Currency.USD && to === Currency.SAR) 
-      return amount * state.settings.usdToSarRate;
-    if (from === Currency.SAR && to === Currency.USD) 
-      return amount * state.settings.sarToUsdRate;
+    if (from === Currency.USD && to === Currency.SAR) return amount * state.settings.usdToSarRate;
+    if (from === Currency.SAR && to === Currency.USD) return amount * state.settings.sarToUsdRate;
     return amount;
   };
 
   const formatMoney = (amount: number, fromCurrency: Currency = state.settings.defaultCurrency): string => {
     const converted = convert(amount, fromCurrency, state.displayCurrency);
     return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: state.displayCurrency,
-      maximumFractionDigits: 0
+      style: 'currency', currency: state.displayCurrency, maximumFractionDigits: 0
     }).format(converted);
   };
 
   const value = {
     ...state,
+    // Override counterparties with shared_clients data (same Counterparty[] shape)
+    counterparties: asFinanceCounterparties as unknown as Counterparty[],
     addProject, updateProject, deleteProject,
     addMilestone, updateMilestone, deleteMilestone, completeMilestone,
     addBillingDocument, updateBillingDocument, issueDocument, submitForApproval, approveDocument, markAsSent, voidDocument, returnToDraft,
