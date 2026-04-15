@@ -20,23 +20,27 @@ export default function ContractsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
 
-  // BUG-7 FIX: auto-open editor when navigated with ?new=1 (e.g. from dashboard)
+  // Auto-open editor when navigated with ?new=1 (e.g. from Dashboard)
   useEffect(() => {
     if (searchParams.get('new') === '1') {
       setEditingId(null);
       setShowEditor(true);
-      // Remove the param so back-navigation doesn't re-open
       setSearchParams({}, { replace: true });
     }
   }, [searchParams]);
 
+  // ContractEditor calls setContracts with the full mutated array.
+  // We extract only the new/changed contract and forward it to Firestore.
   const handleSetContracts = (newContracts: Contract[]) => {
     if (editingId) {
+      // Edit path: find the contract being edited and update it
       const updated = newContracts.find((c) => c.id === editingId);
       if (updated) updateContract(editingId, updated);
     } else {
+      // New contract path: find the id that does not yet exist in Firestore
       const existingIds = new Set(contracts.map((c) => c.id));
       const added = newContracts.find((c) => !existingIds.has(c.id));
+      // addContract now preserves the id on the contract object
       if (added) addContract(added);
     }
   };

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { 
-  BillingDocument, 
-  DocumentType, 
-  DocumentDirection, 
-  DocumentStatus, 
-  Currency, 
-  TaxProfile, 
+import {
+  BillingDocument,
+  DocumentType,
+  DocumentDirection,
+  DocumentStatus,
+  Currency,
+  TaxProfile,
   BillingLineItem
 } from '../types';
 import { ChevronLeft, Plus, Trash2, Save, AlertCircle } from 'lucide-react';
@@ -16,17 +16,17 @@ import { platformBus, PLATFORM_EVENTS } from '../../../core/events/platformBus';
 export default function BillingFormPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { 
-    addBillingDocument, 
-    counterparties, 
-    projects, 
-    legalEntities, 
+  const {
+    addBillingDocument,
+    counterparties,
+    projects,
+    legalEntities,
     settings,
-    loading 
+    loading
   } = useApp();
 
   const initialType = searchParams.get('type') as any || 'AR';
-  
+
   const [formData, setFormData] = useState<Omit<BillingDocument, 'id' | 'createdAt' | 'updatedAt'>>({
     documentNumber: '',
     type: initialType === 'CreditNote' ? DocumentType.CreditNote : DocumentType.Invoice,
@@ -72,7 +72,6 @@ export default function BillingFormPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Filter counterparties based on direction
   const filteredCounterparties = counterparties.filter(c => {
     if (formData.direction === DocumentDirection.AR) return c.type === 'CUSTOMER' || c.type === 'BOTH';
     if (formData.direction === DocumentDirection.AP) return c.type === 'VENDOR' || c.type === 'BOTH';
@@ -91,21 +90,18 @@ export default function BillingFormPage() {
     const { name, value } = e.target;
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
-      
-      // Auto-update counterparty name
+
       if (name === 'counterpartyId') {
         const cp = counterparties.find(c => c.id === value);
         if (cp) {
           newData.counterpartyName = cp.name;
           newData.currency = cp.currency;
-          // Auto-calc due date based on payment terms
           const date = new Date(newData.date);
           date.setDate(date.getDate() + cp.paymentTermsDays);
           newData.dueDate = date.toISOString().split('T')[0];
         }
       }
 
-      // Handle Direction Change
       if (name === 'direction') {
         if (value === DocumentDirection.IC) {
           newData.taxProfile = TaxProfile.Intercompany;
@@ -116,27 +112,24 @@ export default function BillingFormPage() {
         }
       }
 
-      // Handle Inter-company Entities
       if (name === 'fromEntityId' || name === 'toEntityId') {
-         const fromId = name === 'fromEntityId' ? value : newData.fromEntityId;
-         const toId = name === 'toEntityId' ? value : newData.toEntityId;
-         
-         if (fromId && toId) {
-            const fromEntity = legalEntities.find(e => e.id === fromId);
-            const toEntity = legalEntities.find(e => e.id === toId);
-            if (fromEntity && toEntity) {
-               newData.counterpartyName = `${fromEntity.name} → ${toEntity.name}`;
-               newData.counterpartyId = toId; // Use To Entity as counterparty reference
-               newData.currency = fromEntity.currency; // Use From Entity currency
-            }
-         }
+        const fromId = name === 'fromEntityId' ? value : newData.fromEntityId;
+        const toId = name === 'toEntityId' ? value : newData.toEntityId;
+        if (fromId && toId) {
+          const fromEntity = legalEntities.find(e => e.id === fromId);
+          const toEntity = legalEntities.find(e => e.id === toId);
+          if (fromEntity && toEntity) {
+            newData.counterpartyName = `${fromEntity.name} → ${toEntity.name}`;
+            newData.counterpartyId = toId;
+            newData.currency = fromEntity.currency;
+          }
+        }
       }
 
       return newData;
     });
   };
 
-  // Line Item Management
   const addLine = () => {
     const newLine: BillingLineItem = {
       id: crypto.randomUUID(),
@@ -155,31 +148,17 @@ export default function BillingFormPage() {
     setFormData(prev => {
       const newLines = prev.lines.map(line => {
         if (line.id !== id) return line;
-        
         const updatedLine = { ...line, [field]: value };
-        
-        // Recalculate line totals
         if (field === 'quantity' || field === 'unitPrice' || field === 'taxCode') {
           updatedLine.subtotal = updatedLine.quantity * updatedLine.unitPrice;
-          
-          let taxRate = 0;
-          if (updatedLine.taxCode === TaxProfile.Standard) taxRate = 0.15; // Should come from settings/constants
-          
+          const taxRate = updatedLine.taxCode === TaxProfile.Standard ? 0.15 : 0;
           updatedLine.taxAmount = updatedLine.subtotal * taxRate;
           updatedLine.total = updatedLine.subtotal + updatedLine.taxAmount;
         }
-        
         return updatedLine;
       });
-
       const totals = calculateTotals(newLines);
-      
-      return {
-        ...prev,
-        lines: newLines,
-        ...totals,
-        balance: totals.total - prev.paidAmount
-      };
+      return { ...prev, lines: newLines, ...totals, balance: totals.total - prev.paidAmount };
     });
   };
 
@@ -187,12 +166,7 @@ export default function BillingFormPage() {
     setFormData(prev => {
       const newLines = prev.lines.filter(line => line.id !== id);
       const totals = calculateTotals(newLines);
-      return {
-        ...prev,
-        lines: newLines,
-        ...totals,
-        balance: totals.total - prev.paidAmount
-      };
+      return { ...prev, lines: newLines, ...totals, balance: totals.total - prev.paidAmount };
     });
   };
 
@@ -203,7 +177,7 @@ export default function BillingFormPage() {
       await addBillingDocument(formData);
       navigate('/billing');
     } catch (error) {
-      console.error("Error creating document:", error);
+      console.error('Error creating document:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -212,6 +186,12 @@ export default function BillingFormPage() {
   if (loading.counterparties || loading.projects) {
     return <div>Loading...</div>;
   }
+
+  // Inline button classes — btn-primary/btn-secondary don't work in Tailwind v4
+  const btnPrimary = 'inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+  const btnSecondary = 'inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+  const formLabel = 'block text-sm font-medium text-gray-700 mb-1';
+  const formInput = 'block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500';
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -225,33 +205,18 @@ export default function BillingFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg overflow-hidden p-6 space-y-8">
-        {/* Top Section: Basic Info */}
         <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-3">
           <div>
-            <label className="form-label">Direction</label>
-            <select
-              name="direction"
-              value={formData.direction}
-              onChange={handleChange}
-              className="form-input"
-            >
-              {Object.values(DocumentDirection).map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
+            <label className={formLabel}>Direction</label>
+            <select name="direction" value={formData.direction} onChange={handleChange} className={formInput}>
+              {Object.values(DocumentDirection).map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
 
           <div>
-            <label className="form-label">Type</label>
-            <select
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-              className="form-input"
-            >
-              {Object.values(DocumentType).map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
+            <label className={formLabel}>Type</label>
+            <select name="type" value={formData.type} onChange={handleChange} className={formInput}>
+              {Object.values(DocumentType).map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
 
@@ -260,120 +225,60 @@ export default function BillingFormPage() {
               <div className="sm:col-span-3">
                 <div className="rounded-md bg-blue-50 p-4 mb-4">
                   <div className="flex">
-                    <div className="flex-shrink-0">
-                      <AlertCircle className="h-5 w-5 text-blue-400" aria-hidden="true" />
-                    </div>
-                    <div className="ml-3 flex-1 md:flex md:justify-between">
-                      <p className="text-sm text-blue-700">Inter-company invoices use 0% tax automatically.</p>
-                    </div>
+                    <AlertCircle className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                    <p className="ml-3 text-sm text-blue-700">Inter-company invoices use 0% tax automatically.</p>
                   </div>
                 </div>
               </div>
               <div>
-                <label className="form-label">From Entity</label>
-                <select
-                  name="fromEntityId"
-                  required
-                  value={formData.fromEntityId || ''}
-                  onChange={handleChange}
-                  className="form-input"
-                >
+                <label className={formLabel}>From Entity</label>
+                <select name="fromEntityId" required value={formData.fromEntityId || ''} onChange={handleChange} className={formInput}>
                   <option value="">Select From Entity</option>
-                  {legalEntities.map(e => (
-                    <option key={e.id} value={e.id}>{e.name}</option>
-                  ))}
+                  {legalEntities.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="form-label">To Entity</label>
-                <select
-                  name="toEntityId"
-                  required
-                  value={formData.toEntityId || ''}
-                  onChange={handleChange}
-                  className="form-input"
-                >
+                <label className={formLabel}>To Entity</label>
+                <select name="toEntityId" required value={formData.toEntityId || ''} onChange={handleChange} className={formInput}>
                   <option value="">Select To Entity</option>
-                  {legalEntities
-                    .filter(e => e.id !== formData.fromEntityId)
-                    .map(e => (
-                    <option key={e.id} value={e.id}>{e.name}</option>
-                  ))}
+                  {legalEntities.filter(e => e.id !== formData.fromEntityId).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </div>
             </>
           ) : (
             <div>
-              <label className="form-label">Counterparty</label>
-              <select
-                name="counterpartyId"
-                required
-                value={formData.counterpartyId}
-                onChange={handleChange}
-                className="form-input"
-              >
+              <label className={formLabel}>Counterparty</label>
+              <select name="counterpartyId" required value={formData.counterpartyId} onChange={handleChange} className={formInput}>
                 <option value="">Select Counterparty</option>
-                {filteredCounterparties.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                {filteredCounterparties.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           )}
 
-
-
           <div>
-            <label className="form-label">Date</label>
-            <input
-              type="date"
-              name="date"
-              required
-              value={formData.date}
-              onChange={handleChange}
-              className="form-input"
-            />
+            <label className={formLabel}>Date</label>
+            <input type="date" name="date" required value={formData.date} onChange={handleChange} className={formInput} />
           </div>
 
           <div>
-            <label className="form-label">Due Date</label>
-            <input
-              type="date"
-              name="dueDate"
-              required
-              value={formData.dueDate}
-              onChange={handleChange}
-              className="form-input"
-            />
+            <label className={formLabel}>Due Date</label>
+            <input type="date" name="dueDate" required value={formData.dueDate} onChange={handleChange} className={formInput} />
           </div>
 
           <div>
-            <label className="form-label">Project (Optional)</label>
-            <select
-              name="projectId"
-              value={formData.projectId || ''}
-              onChange={handleChange}
-              className="form-input"
-            >
+            <label className={formLabel}>Project (Optional)</label>
+            <select name="projectId" value={formData.projectId || ''} onChange={handleChange} className={formInput}>
               <option value="">None</option>
               {projects
                 .filter(p => !formData.counterpartyId || p.clientId === formData.counterpartyId)
-                .map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
+                .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
 
           <div>
-            <label className="form-label">Currency</label>
-            <select
-              name="currency"
-              value={formData.currency}
-              onChange={handleChange}
-              className="form-input"
-            >
-              {Object.values(Currency).map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
+            <label className={formLabel}>Currency</label>
+            <select name="currency" value={formData.currency} onChange={handleChange} className={formInput}>
+              {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
@@ -382,13 +287,8 @@ export default function BillingFormPage() {
         <div className="space-y-4 pt-6 border-t border-gray-200">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-900">Line Items</h3>
-            <button
-              type="button"
-              onClick={addLine}
-              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
-            >
-              <Plus className="-ml-0.5 mr-2 h-4 w-4" />
-              Add Line
+            <button type="button" onClick={addLine} className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200">
+              <Plus className="-ml-0.5 mr-2 h-4 w-4" />Add Line
             </button>
           </div>
 
@@ -403,60 +303,29 @@ export default function BillingFormPage() {
                   <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-3">
                     <div className="sm:col-span-5">
                       <label className="block text-xs text-gray-500 mb-1">Description</label>
-                      <input
-                        type="text"
-                        required
-                        value={line.description}
-                        onChange={(e) => updateLine(line.id, 'description', e.target.value)}
-                        className="form-input"
-                      />
+                      <input type="text" required value={line.description} onChange={(e) => updateLine(line.id, 'description', e.target.value)} className={formInput} />
                     </div>
                     <div className="sm:col-span-2">
                       <label className="block text-xs text-gray-500 mb-1">Qty</label>
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        value={line.quantity}
-                        onChange={(e) => updateLine(line.id, 'quantity', parseFloat(e.target.value) || 0)}
-                        className="form-input"
-                      />
+                      <input type="number" min="1" required value={line.quantity} onChange={(e) => updateLine(line.id, 'quantity', parseFloat(e.target.value) || 0)} className={formInput} />
                     </div>
                     <div className="sm:col-span-2">
                       <label className="block text-xs text-gray-500 mb-1">Unit Price</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        required
-                        value={line.unitPrice}
-                        onChange={(e) => updateLine(line.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                        className="form-input"
-                      />
+                      <input type="number" min="0" step="0.01" required value={line.unitPrice} onChange={(e) => updateLine(line.id, 'unitPrice', parseFloat(e.target.value) || 0)} className={formInput} />
                     </div>
                     <div className="sm:col-span-3">
                       <label className="block text-xs text-gray-500 mb-1">Tax Code</label>
-                      <select
-                        value={line.taxCode}
-                        onChange={(e) => updateLine(line.id, 'taxCode', e.target.value)}
-                        className="form-input"
-                      >
-                        {Object.values(TaxProfile).map(t => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
+                      <select value={line.taxCode} onChange={(e) => updateLine(line.id, 'taxCode', e.target.value)} className={formInput}>
+                        {Object.values(TaxProfile).map(tp => <option key={tp} value={tp}>{tp}</option>)}
                       </select>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeLine(line.id)}
-                    className="mt-6 text-red-400 hover:text-red-600 p-1"
-                  >
+                  <button type="button" onClick={() => removeLine(line.id)} className="mt-6 text-red-400 hover:text-red-600 p-1">
                     <Trash2 size={18} />
                   </button>
                 </div>
               ))}
-              
+
               <div className="flex flex-col items-end pt-4 space-y-1 pr-12">
                 <div className="flex justify-between w-48 text-sm text-gray-600">
                   <span>Subtotal:</span>
@@ -477,31 +346,16 @@ export default function BillingFormPage() {
 
         {/* Notes */}
         <div>
-          <label htmlFor="notes" className="form-label">Notes</label>
-          <textarea
-            name="notes"
-            id="notes"
-            rows={3}
-            value={formData.notes || ''}
-            onChange={handleChange}
-            className="form-input"
-          />
+          <label htmlFor="notes" className={formLabel}>Notes</label>
+          <textarea name="notes" id="notes" rows={3} value={formData.notes || ''} onChange={handleChange} className={formInput} />
         </div>
 
         {/* Footer Actions */}
         <div className="flex justify-end pt-6 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={() => navigate('/billing')}
-            className="btn-secondary mr-3"
-          >
+          <button type="button" onClick={() => navigate('/billing')} className={`${btnSecondary} mr-3`}>
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="btn-primary"
-          >
+          <button type="submit" disabled={isSubmitting} className={btnPrimary}>
             <Save className="mr-2 h-5 w-5" />
             {isSubmitting ? 'Saving...' : 'Save as Draft'}
           </button>
