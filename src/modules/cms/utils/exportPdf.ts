@@ -7,120 +7,131 @@ export interface PdfExportOptions {
 }
 
 /**
- * Exports the DOM element with the given id as a multi-page A4 PDF.
+ * WHY THE CLONE APPROACH:
  *
- * KEY FIX: The preview element lives inside a flex overflow-auto container
- * that scrolls independently from window. html2canvas with scrollY:-window.scrollY
- * was always 0 and captured the wrong slice when the inner container was scrolled.
+ * #contract-preview lives inside ContractEditor's `div.flex-1.overflow-auto`
+ * scroll panel. html2canvas traverses the DOM and inherits the overflow/clip
+ * context from every ancestor — so even if we scroll the container to 0, the
+ * rendered canvas is clipped to the scroll-container's visible height.
  *
- * Solution:
- *  1. Scroll the inner scroll-parent to 0 before capture so the element is
- *     fully in view from the top.
- *  2. Pass windowWidth/windowHeight equal to the element's full scroll dimensions
- *     so html2canvas renders the complete content, not just the visible viewport.
- *  3. Temporarily move #contract-preview out of the scroll container into a
- *     full-size offscreen clone so html2canvas sees a normal document flow.
+ * Solution: clone the element into a body-level off-screen wrapper before
+ * calling html2canvas. At body level there are no scroll-container ancestors,
+ * so the full element height is captured in one pass. The clone is removed
+ * immediately after capture regardless of success or failure.
+ *
+ * Tailwind classes work on the clone because the global stylesheet applies to
+ * all elements in the document regardless of where they are in the DOM tree.
  */
 export async function exportContractToPdf(
   elementId: string,
   options: PdfExportOptions = {}
 ): Promise<void> {
   const blob = await generatePdfBlob(elementId);
-  const filename = options.filename || `\u0639\u0642\u062f-${Date.now()}.pdf`;
-  const url = URL.createObjectURL(blob);
+  const filename = options.filename || `عقد-${Date.now()}.pdf`;
+
+  const url  = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href = url;
+  link.href  = url;
   link.download = filename;
   link.style.display = 'none';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // Revoke after a tick so the download has time to start
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 export async function generatePdfBlob(elementId: string): Promise<Blob> {
-  const element = document.getElementById(elementId);
-  if (!element) throw new Error(`Element #${elementId} not found`);
+  const source = document.getElementById(elementId);
+  if (!source) throw new Error(`Element #${elementId} not found`);
 
-  // Scroll every ancestor overflow container to the top so the element
-  // starts at y=0 inside its scroll parent. html2canvas clones the DOM
-  // in place, so anything scrolled out of view would be missed.
-  let node: HTMLElement | null = element.parentElement;
-  while (node) {
-    const style = window.getComputedStyle(node);
-    const overflow = style.overflow + style.overflowY;
-    if (/auto|scroll|hidden/.test(overflow)) {
-      node.scrollTop = 0;
-    }
-    node = node.parentElement;
-  }
+  // ── 1. Clone into a body-level off-screen wrapper ──────────────────────────
+  //
+  // Width matches the source element's rendered width so text wrapping is
+  // identical to what the user sees in the preview.
+  const sourceWidth = source.getBoundingClientRect().width || source.scrollWidth || 900;
 
-  // Give the browser one animation frame to settle after scrolling.
-  await new Promise(r => requestAnimationFrame(r));
-
-  // Capture at 2x for crisp Arabic text. Use the element's full scrollHeight
-  // as the window height so the entire content is rendered in one pass
-  // regardless of how tall the viewport is.
-  const fullWidth  = element.scrollWidth;
-  const fullHeight = element.scrollHeight;
-
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: true,
-    scrollX: 0,
-    scrollY: 0,
-    windowWidth: fullWidth,
-    windowHeight: fullHeight,
-    width: fullWidth,
-    height: fullHeight,
-    backgroundColor: '#ffffff',
-    logging: false,
+  const wrapper = document.createElement('div');
+  Object.assign(wrapper.style, {
+    position:       'absolute',
+    top:            '0px',
+    left:           '-10000px',   // off-screen horizontally
+    width:          `${Math.round(sourceWidth)}px`,
+    background:     '#ffffff',
+    zIndex:         '-1',
+    overflow:       'visible',    // no clipping
+    pointerEvents:  'none',
   });
 
-  // A4 layout (mm)
-  const PAGE_W   = 210;
-  const PAGE_H   = 297;
-  const MARGIN   = 10;
-  const USABLE_W = PAGE_W - 2 * MARGIN; // 190 mm
-  const USABLE_H = PAGE_H - 2 * MARGIN; // 277 mm
+  const clone = source.cloneNode(true) as HTMLElement;
+  // Remove any sticky / fixed positioning from .no-print toolbar so it
+  // doesn't offset the rendering. The toolbar buttons are hidden anyway
+  // via the .no-print class but removing them avoids layout side-effects.
+  clone.querySelectorAll('.no-print').forEach(el => (el as HTMLElement).remove());
 
-  // Total canvas height scaled to fit the page width
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  // ── 2. Wait two animation frames for layout to settle ─────────────────────
+  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  // ── 3. Capture ─────────────────────────────────────────────────────────────
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = await html2canvas(wrapper, {
+      scale:           2,          // 2× for crisp Arabic text
+      useCORS:         true,
+      allowTaint:      true,
+      scrollX:         0,
+      scrollY:         0,
+      backgroundColor: '#ffffff',
+      logging:         false,
+    });
+  } finally {
+    // Always clean up the clone, even if html2canvas threw
+    document.body.removeChild(wrapper);
+  }
+
+  // Guard against degenerate canvas (shouldn't happen but prevents ÷0)
+  if (canvas.width === 0 || canvas.height === 0) {
+    throw new Error('html2canvas produced an empty canvas — nothing to export');
+  }
+
+  // ── 4. Slice canvas into A4 pages ─────────────────────────────────────────
+  const MARGIN   = 10;           // mm
+  const USABLE_W = 190;          // mm  (210 - 2×10)
+  const USABLE_H = 277;          // mm  (297 - 2×10)
+
+  // How many mm tall is the full canvas when scaled to fit USABLE_W?
   const scaledHeightMm = (canvas.height / canvas.width) * USABLE_W;
 
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pdf  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  let done   = 0;
+  let page   = 0;
 
-  let renderedMm = 0;
-  let pageIndex  = 0;
+  while (done < scaledHeightMm) {
+    if (page++ > 0) pdf.addPage();
 
-  while (renderedMm < scaledHeightMm) {
-    if (pageIndex > 0) pdf.addPage();
+    const sliceMm = Math.min(USABLE_H, scaledHeightMm - done);
+    const srcY    = Math.round((done    / scaledHeightMm) * canvas.height);
+    const srcH    = Math.round((sliceMm / scaledHeightMm) * canvas.height);
 
-    const sliceMm = Math.min(USABLE_H, scaledHeightMm - renderedMm);
-    const srcYPx  = Math.round((renderedMm / scaledHeightMm) * canvas.height);
-    const srcHPx  = Math.round((sliceMm   / scaledHeightMm) * canvas.height);
-
-    const sliceCanvas       = document.createElement('canvas');
-    sliceCanvas.width       = canvas.width;
-    sliceCanvas.height      = Math.max(1, srcHPx);
-    const ctx               = sliceCanvas.getContext('2d')!;
-    ctx.fillStyle           = '#ffffff';
-    ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-    ctx.drawImage(
-      canvas,
-      0, srcYPx, canvas.width, srcHPx,
-      0, 0,      sliceCanvas.width, sliceCanvas.height,
-    );
+    const slice        = document.createElement('canvas');
+    slice.width        = canvas.width;
+    slice.height       = Math.max(1, srcH);
+    const ctx          = slice.getContext('2d')!;
+    ctx.fillStyle      = '#ffffff';
+    ctx.fillRect(0, 0, slice.width, slice.height);
+    ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, slice.width, slice.height);
 
     pdf.addImage(
-      sliceCanvas.toDataURL('image/jpeg', 0.95),
+      slice.toDataURL('image/jpeg', 0.95),
       'JPEG',
       MARGIN, MARGIN,
       USABLE_W, sliceMm,
     );
 
-    renderedMm += USABLE_H;
-    pageIndex++;
+    done += USABLE_H;
   }
 
   return pdf.output('blob');
