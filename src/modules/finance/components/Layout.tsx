@@ -13,28 +13,29 @@ import { DocumentStatus, DocumentDirection, Currency } from '../types';
 import { format } from 'date-fns';
 
 export default function Layout() {
-  const { user, billingDocuments, settings, updateSettings, displayCurrency, setDisplayCurrency } = useApp();
+  const { user, billingDocuments, displayCurrency, setDisplayCurrency } = useApp();
   const { lang, setLang } = useLang();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // Platform Settings (/settings) is in the platform sidebar (ModuleSwitcher).
+  // It is intentionally NOT duplicated here.
   const navigation = [
-    { name_en: 'Dashboard',        name_ar: '\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645',              href: '/finance/dashboard',        icon: LayoutDashboard },
-    { name_en: 'Projects',         name_ar: '\u0627\u0644\u0645\u0634\u0627\u0631\u064a\u0639',                           href: '/finance/projects',         icon: Briefcase },
-    { name_en: 'Subscriptions',    name_ar: '\u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643\u0627\u062a',              href: '/finance/subscriptions',    icon: Repeat },
-    { name_en: 'Billing',          name_ar: '\u0627\u0644\u0641\u0648\u0627\u062a\u064a\u0631',                          href: '/finance/billing',          icon: FileText },
-    { name_en: 'Payments',         name_ar: '\u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0627\u062a',                   href: '/finance/payments',         icon: CreditCard },
-    { name_en: 'Counterparties',   name_ar: '\u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0648\u0627\u0644\u0645\u0648\u0631\u062f\u064a\u0646', href: '/finance/counterparties',   icon: Users },
-    { name_en: 'Products',         name_ar: '\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a',                          href: '/finance/products',         icon: Package },
-    { name_en: 'Settings',         name_ar: '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a',                   href: '/finance/settings',         icon: Settings },
-    { name_en: 'Platform Settings',name_ar: '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629', href: '/finance/global-settings',  icon: Globe },
+    { name_en: 'Dashboard',      name_ar: 'لوحة التحكم',              href: '/finance/dashboard',      icon: LayoutDashboard },
+    { name_en: 'Projects',       name_ar: 'المشاريع',                       href: '/finance/projects',       icon: Briefcase },
+    { name_en: 'Subscriptions',  name_ar: 'الاشتراكات',              href: '/finance/subscriptions',  icon: Repeat },
+    { name_en: 'Billing',        name_ar: 'الفواتير',                      href: '/finance/billing',        icon: FileText },
+    { name_en: 'Payments',       name_ar: 'المدفوعات',                   href: '/finance/payments',       icon: CreditCard },
+    { name_en: 'Counterparties', name_ar: 'العملاء والموردين',     href: '/finance/counterparties', icon: Users },
+    { name_en: 'Products',       name_ar: 'المنتجات',                      href: '/finance/products',       icon: Package },
+    { name_en: 'Settings',       name_ar: 'الإعدادات',                   href: '/finance/settings',       icon: Settings },
   ];
 
   const handleLogout = async () => {
     try { await signOut(auth); navigate('/login'); }
-    catch (error) { console.error('Failed to log out', error); }
+    catch (err) { console.error('Failed to log out', err); }
   };
 
   const overdueCount = billingDocuments.filter(d =>
@@ -80,16 +81,15 @@ export default function Layout() {
         {/* Nav */}
         <div className="flex-1 overflow-y-auto py-4">
           <nav className="px-2 space-y-1">
-            {navigation.map((item) => {
+            {navigation.map(item => {
               const isActive = location.pathname.startsWith(item.href);
               const itemName = t(item.name_ar, item.name_en, lang);
-              const isGlobal = item.href.includes('global-settings');
               return (
                 <Link key={item.name_en} to={item.href}
                   className={cn(
                     'group flex items-center px-2 py-2 text-sm font-medium rounded-lg transition-colors',
-                    isActive ? 'bg-primary-600 text-white'
-                      : isGlobal ? 'text-emerald-400 hover:bg-emerald-900/20 border border-emerald-800/30'
+                    isActive
+                      ? 'bg-indigo-600 text-white'
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white',
                     isSidebarCollapsed ? 'justify-center' : ''
                   )}
@@ -98,7 +98,7 @@ export default function Layout() {
                 >
                   <item.icon className={cn(
                     'flex-shrink-0 h-5 w-5',
-                    isActive ? 'text-white' : isGlobal ? 'text-emerald-400' : 'text-slate-400 group-hover:text-white',
+                    isActive ? 'text-white' : 'text-slate-400 group-hover:text-white',
                     !isSidebarCollapsed && (isRTL ? 'ml-3' : 'mr-3')
                   )} />
                   {!isSidebarCollapsed && itemName}
@@ -110,13 +110,12 @@ export default function Layout() {
 
         {/* Footer: user + lang toggle + logout */}
         <div className="border-t border-slate-800 p-4 space-y-3">
-          {/* User info */}
           {!isSidebarCollapsed ? (
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 {user?.photoURL
                   ? <img className="h-8 w-8 rounded-full" src={user.photoURL} alt="" />
-                  : <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-primary-400 font-bold">{user?.email?.charAt(0).toUpperCase()}</div>}
+                  : <div className="h-8 w-8 rounded-full bg-slate-700 flex items-center justify-center text-indigo-400 font-bold">{user?.email?.charAt(0).toUpperCase()}</div>}
               </div>
               <div className={cn('overflow-hidden', isRTL ? 'mr-3' : 'ml-3')}>
                 <p className="text-sm font-medium text-slate-300 truncate">{user?.displayName || user?.email}</p>
@@ -124,7 +123,7 @@ export default function Layout() {
             </div>
           ) : (
             <div className="flex justify-center">
-              <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-primary-400 font-bold">{user?.email?.charAt(0).toUpperCase()}</div>
+              <div className="h-8 w-8 rounded-full bg-slate-700 flex items-center justify-center text-indigo-400 font-bold">{user?.email?.charAt(0).toUpperCase()}</div>
             </div>
           )}
 
@@ -135,18 +134,18 @@ export default function Layout() {
               'w-full flex items-center px-2 py-2 text-sm font-medium text-slate-300 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors',
               isSidebarCollapsed ? 'justify-center' : 'space-x-2 space-x-reverse'
             )}
-            title={isSidebarCollapsed ? (lang === 'ar' ? 'English' : '\u0639\u0631\u0628\u064a') : undefined}
+            title={isSidebarCollapsed ? (lang === 'ar' ? 'English' : 'عربي') : undefined}
           >
             <Globe className={cn('h-5 w-5 flex-shrink-0', !isSidebarCollapsed && (isRTL ? 'ml-2' : 'mr-2'))} />
-            {!isSidebarCollapsed && <span>{lang === 'ar' ? 'English' : '\u0639\u0631\u0628\u064a'}</span>}
+            {!isSidebarCollapsed && <span>{lang === 'ar' ? 'English' : 'عربي'}</span>}
           </button>
 
           {/* Logout */}
           <button onClick={handleLogout}
             className={cn('w-full flex items-center px-2 py-2 text-sm font-medium text-red-400 rounded-md hover:bg-slate-800 transition-colors', isSidebarCollapsed ? 'justify-center' : '')}
-            title={t('\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c', 'Sign out', lang)}>
+            title={t('تسجيل الخروج', 'Sign out', lang)}>
             <LogOut className={cn('h-5 w-5', !isSidebarCollapsed && (isRTL ? 'ml-3' : 'mr-3'))} />
-            {!isSidebarCollapsed && t('\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c', 'Sign out', lang)}
+            {!isSidebarCollapsed && t('تسجيل الخروج', 'Sign out', lang)}
           </button>
         </div>
       </div>
@@ -155,21 +154,16 @@ export default function Layout() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="bg-white border-b border-slate-200 shadow-sm h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8">
           <h2 className="text-lg font-medium text-slate-900">
-            {navigation.find(n => location.pathname.startsWith(n.href))
-              ? t(
-                  navigation.find(n => location.pathname.startsWith(n.href))!.name_ar,
-                  navigation.find(n => location.pathname.startsWith(n.href))!.name_en,
-                  lang
-                )
-              : t('\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645', 'Dashboard', lang)}
+            {(() => {
+              const match = navigation.find(n => location.pathname.startsWith(n.href));
+              return match ? t(match.name_ar, match.name_en, lang) : t('لوحة التحكم', 'Dashboard', lang);
+            })()}
           </h2>
           <div className="flex items-center space-x-4 space-x-reverse">
-            {/* Date — inline, no wrapping */}
             <span className="whitespace-nowrap text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-2">
               {format(new Date(), lang === 'ar' ? 'd MMMM yyyy' : 'MMMM d, yyyy')}
             </span>
-            <button onClick={toggleCurrency}
-              className="px-3 py-1 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200">
+            <button onClick={toggleCurrency} className="px-3 py-1 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200">
               {displayCurrency}
             </button>
             <button onClick={toggleDarkMode} className="p-1 text-slate-500 hover:text-slate-700">

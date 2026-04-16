@@ -14,15 +14,9 @@ import PaymentsPage from './pages/PaymentsPage';
 import CounterpartiesPage from './pages/CounterpartiesPage';
 import ProductsPage from './pages/ProductsPage';
 import SettingsPage from './pages/SettingsPage';
-import GlobalSettingsPage from '../../core/pages/GlobalSettingsPage';
 import { AppProvider } from './context/AppContext';
-import { LanguageProvider, useLang } from './context/LanguageContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { ToastProvider } from './components/ui/Toast';
-
-function GlobalSettingsWrapper() {
-  const { lang } = useLang();
-  return <GlobalSettingsPage />;
-}
 
 export default function FinanceRoutes() {
   return (
@@ -51,7 +45,6 @@ export default function FinanceRoutes() {
               <Route path="counterparties" element={<CounterpartiesPage />} />
               <Route path="products" element={<ProductsPage />} />
               <Route path="settings" element={<SettingsPage />} />
-              <Route path="global-settings" element={<GlobalSettingsWrapper />} />
             </Route>
           </Routes>
         </AppProvider>
