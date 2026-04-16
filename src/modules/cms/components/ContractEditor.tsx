@@ -11,22 +11,19 @@ import { platformBus, PLATFORM_EVENTS } from '../../../core/events/platformBus';
 
 type Tab = 'metadata' | 'articles' | 'payments' | 'appendices' | 'attachments' | 'versions' | 'preview';
 
+// NOTE: body_ar values that contain newlines MUST use template literals (backticks).
+// Single-quoted strings with literal newlines cause esbuild "Unterminated string literal" errors.
 const getDefaultArticles = (): Article[] => [
-  { id: 'a1',  order_index: 1,  title_ar: 'التمهيد',                   body_ar: 'يعتبر التمهيد السابق والمقدمة إضافةً إلى الملاحق المرفقة جزءاً لا يتجزأ من هذا العقد ومتممةً ومفسرةً لأحكامه.', article_type: 'تمهيد', is_locked: true,  is_visible: true },
-  { id: 'a2',  order_index: 2,  title_ar: 'الموضوع',                   body_ar: '[عنوان العقد] لصالح الطرف الثاني ([اسم الطرف الثاني]) اعتماداً على العرض الفني المعتمد من قبل الطرفين والملحق مع هذا العقد.', article_type: 'موضوع', is_locked: false, is_visible: true },
-  { id: 'a3',  order_index: 3,  title_ar: 'مدة التنفيذ',              body_ar: 'يلتزم الطرف الأول بتنفيذ [عنوان العقد] لصالح الطرف الثاني خلال مدة لا تزيد عن ستة أشهر من تاريخ توقيع العقد من كلا الطرفين وتحويل الدفعة الأولى لحساب الطرف الأول.', article_type: 'مدة التنفيذ', is_locked: false, is_visible: true },
-  { id: 'a4',  order_index: 4,  title_ar: 'القيمة والدفعات',          body_ar: 'تبلغ قيمة العقد الإجمالية المبلغ المحدد في جدول الدفعات أدناه شاملةً ضريبة القيمة المضافة.', article_type: 'القيمة والدفعات', is_locked: false, is_visible: true },
-  { id: 'a5',  order_index: 5,  title_ar: 'الملكية الفكرية',           body_ar: 'الملكية الفكرية للمشروع بمكوناته المختلفة هي ملك للطرف الثاني ولا يحق للطرف الأول طلب أي حقوق ملكية عن مخرجات المشروع بعد استلام كامل المستحقات المالية.', article_type: 'الملكية الفكرية', is_locked: false, is_visible: true },
-  { id: 'a6',  order_index: 6,  title_ar: 'آلية إدارة المشروع والدعم الفني', body_ar: '١. بعد الاتفاق وتوقيع العقد وإيداع الدفعة الأولى، يُعيّن الطرف الثاني مديراً للمشروع ممثلاً له في هذا التعاقد.
-٢. يتم الاجتماع الأولي بين مدير المشروع الممثل للطرف الثاني ومدير المشروع الممثل للطرف الأول للاتفاق على آليات سير المشروع.', article_type: 'إدارة المشروع', is_locked: false, is_visible: true },
-  { id: 'a7',  order_index: 7,  title_ar: 'آلية طلبات التغيير',     body_ar: 'في حالة قيام الطرف الثاني بطلب تعديل على نطاق العمل المتفق عليه، يقوم الطرف الثاني بالاجتماع مع الطرف الأول لشرح المتطلبات الجديدة.', article_type: 'طلبات التغيير', is_locked: false, is_visible: true },
-  { id: 'a8',  order_index: 8,  title_ar: 'إنهاء الاتفاقية',          body_ar: 'تنتهي هذه الاتفاقية في الحالات التالية:
-١. باكتمال المشروع وتسليمه بشكل نهائي.
-٢. باتفاق الطرفين على إنهاء المشروع قبل تنفيذه.', article_type: 'إنهاء الاتفاقية', is_locked: false, is_visible: true },
-  { id: 'a9',  order_index: 9,  title_ar: 'أحكام عامة',                body_ar: '١. يلتزم الطرفان بالأحكام والضوابط الشرعية في تنفيذ الأعمال الفنية.
-٢. يُقر الطرفان بأنهما قد اطلعا على كل بنود ومحتوى هذا العقد.', article_type: 'أحكام عامة', is_locked: true,  is_visible: true },
-  { id: 'a10', order_index: 10, title_ar: 'نُسخ الاتفاقية',          body_ar: 'حُرّير هذا العقد من عشرة بنود بنسختين أصليتين باللغة العربية، واستلم كل طرف نسخةً للعمل بموجبها، ويُعتبر توقيع الطرفين على هذا العقد إقراراً بصحته.
-والله ولي التوفيق.', article_type: 'نسخ الاتفاقية', is_locked: true,  is_visible: true },
+  { id: 'a1',  order_index: 1,  title_ar: 'التمهيد',                        body_ar: 'يعتبر التمهيد السابق والمقدمة إضافةً إلى الملاحق المرفقة جزءاً لا يتجزأ من هذا العقد ومتممةً ومفسرةً لأحكامه.', article_type: 'تمهيد', is_locked: true,  is_visible: true },
+  { id: 'a2',  order_index: 2,  title_ar: 'الموضوع',                        body_ar: '[عنوان العقد] لصالح الطرف الثاني ([اسم الطرف الثاني]) اعتماداً على العرض الفني المعتمد من قبل الطرفين والملحق مع هذا العقد.', article_type: 'موضوع', is_locked: false, is_visible: true },
+  { id: 'a3',  order_index: 3,  title_ar: 'مدة التنفيذ',                   body_ar: 'يلتزم الطرف الأول بتنفيذ [عنوان العقد] لصالح الطرف الثاني خلال مدة لا تزيد عن ستة أشهر من تاريخ توقيع العقد من كلا الطرفين وتحويل الدفعة الأولى لحساب الطرف الأول.', article_type: 'مدة التنفيذ', is_locked: false, is_visible: true },
+  { id: 'a4',  order_index: 4,  title_ar: 'القيمة والدفعات',               body_ar: 'تبلغ قيمة العقد الإجمالية المبلغ المحدد في جدول الدفعات أدناه شاملةً ضريبة القيمة المضافة.', article_type: 'القيمة والدفعات', is_locked: false, is_visible: true },
+  { id: 'a5',  order_index: 5,  title_ar: 'الملكية الفكرية',                body_ar: 'الملكية الفكرية للمشروع بمكوناته المختلفة هي ملك للطرف الثاني ولا يحق للطرف الأول طلب أي حقوق ملكية عن مخرجات المشروع بعد استلام كامل المستحقات المالية.', article_type: 'الملكية الفكرية', is_locked: false, is_visible: true },
+  { id: 'a6',  order_index: 6,  title_ar: 'آلية إدارة المشروع والدعم الفني', body_ar: `١. بعد الاتفاق وتوقيع العقد وإيداع الدفعة الأولى، يُعيّن الطرف الثاني مديراً للمشروع ممثلاً له في هذا التعاقد.\n٢. يتم الاجتماع الأولي بين مدير المشروع الممثل للطرف الثاني ومدير المشروع الممثل للطرف الأول للاتفاق على آليات سير المشروع.`, article_type: 'إدارة المشروع', is_locked: false, is_visible: true },
+  { id: 'a7',  order_index: 7,  title_ar: 'آلية طلبات التغيير',            body_ar: 'في حالة قيام الطرف الثاني بطلب تعديل على نطاق العمل المتفق عليه، يقوم الطرف الثاني بالاجتماع مع الطرف الأول لشرح المتطلبات الجديدة.', article_type: 'طلبات التغيير', is_locked: false, is_visible: true },
+  { id: 'a8',  order_index: 8,  title_ar: 'إنهاء الاتفاقية',               body_ar: `تنتهي هذه الاتفاقية في الحالات التالية:\n١. باكتمال المشروع وتسليمه بشكل نهائي.\n٢. باتفاق الطرفين على إنهاء المشروع قبل تنفيذه.`, article_type: 'إنهاء الاتفاقية', is_locked: false, is_visible: true },
+  { id: 'a9',  order_index: 9,  title_ar: 'أحكام عامة',                     body_ar: `١. يلتزم الطرفان بالأحكام والضوابط الشرعية في تنفيذ الأعمال الفنية.\n٢. يُقر الطرفان بأنهما قد اطلعا على كل بنود ومحتوى هذا العقد.`, article_type: 'أحكام عامة', is_locked: true,  is_visible: true },
+  { id: 'a10', order_index: 10, title_ar: 'نُسخ الاتفاقية',               body_ar: `حُرّير هذا العقد من عشرة بنود بنسختين أصليتين باللغة العربية، واستلم كل طرف نسخةً للعمل بموجبها، ويُعتبر توقيع الطرفين على هذا العقد إقراراً بصحته.\nوالله ولي التوفيق.`, article_type: 'نسخ الاتفاقية', is_locked: true,  is_visible: true },
 ];
 
 interface ContractEditorProps {
@@ -737,7 +734,7 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
   const [driveLink, setDriveLink] = React.useState<string|null>(null);
   React.useEffect(() => { initGoogleDrive(); }, []);
 
-  const san = (n: string) => n.replace(/[\/\\?%*:|"<>]/g, '-').trim();
+  const san = (n: string) => n.replace(/[/\\?%*:|"<>]/g, '-').trim();
 
   const handleDrive = async () => {
     setDriveStatus('uploading'); setDriveLink(null);
@@ -869,7 +866,7 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
                         <p className="font-bold mb-2">{t('طريقة الدفع','Payment schedule',lang)}:</p>
                         <ul className="list-disc list-inside space-y-4 mr-4">
                           {schedule.installments.map((inst:Installment)=>(
-                            <li key={inst.id}><span className="font-bold">{inst.label_ar}</span>: {t('نسبة','','lang')} {inst.percentage}% {t('تستحق عند','due at',lang)} {inst.trigger_event}.<div className="mt-1 text-slate-700">{t('المبلغ','Amount',lang)}: {inst.amount_sar.toLocaleString()} {t('ريال','SAR',lang)} ({inst.amount_words_ar})</div></li>
+                            <li key={inst.id}><span className="font-bold">{inst.label_ar}</span>: {inst.percentage}% {t('تستحق عند','due at',lang)} {inst.trigger_event}.<div className="mt-1 text-slate-700">{t('المبلغ','Amount',lang)}: {inst.amount_sar.toLocaleString()} {t('ريال','SAR',lang)} ({inst.amount_words_ar})</div></li>
                           ))}
                         </ul>
                       </div>
