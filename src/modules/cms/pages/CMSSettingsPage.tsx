@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Globe, ArrowLeft, ArrowRight, Plus, Trash2, GripVertical, Trophy, Edit2, Check, X } from 'lucide-react';
+import { Globe, ArrowLeft, ArrowRight, Plus, Trash2, GripVertical, Trophy, ThumbsDown, Edit2, Check, X } from 'lucide-react';
 import { useLang, t } from '../context/LanguageContext';
 import { useSettings } from '../context/SettingsContext';
 import { ContractStatusConfig } from '../types';
@@ -28,17 +28,22 @@ function TypeRow({ value, onSave, onDelete }: { value: string; onSave: (v: strin
 }
 
 // ── Inline editable row for a contract status ─────────────────────────────────
-function StatusRow({ status, onSave, onDelete, onToggleWin }: {
+function StatusRow({ status, onSave, onDelete, onToggleWin, onToggleLose }: {
   status: ContractStatusConfig;
   onSave: (v: ContractStatusConfig) => void;
   onDelete: () => void;
   onToggleWin: () => void;
+  onToggleLose: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(status.label);
   const commit = () => { if (draft.trim()) { onSave({ ...status, label: draft.trim() }); setEditing(false); } };
+
+  // Derive row background: win = green tint, lose = red tint, neutral = none
+  const rowBg = status.is_win ? 'bg-emerald-50/60' : status.is_lose ? 'bg-red-50/60' : '';
+
   return (
-    <div className={`flex items-center gap-2 group rounded-lg px-2 py-1.5 ${status.is_win ? 'bg-emerald-50/60' : ''}`}>
+    <div className={`flex items-center gap-2 group rounded-lg px-2 py-1.5 ${rowBg}`}>
       <GripVertical size={14} className="text-slate-300 shrink-0" />
       {editing ? (
         <>
@@ -51,7 +56,8 @@ function StatusRow({ status, onSave, onDelete, onToggleWin }: {
       ) : (
         <>
           <span className="flex-1 text-sm text-slate-700">{status.label}</span>
-          {/* Win badge */}
+
+          {/* Win badge — clicking sets win=true, lose=false (mutual exclusivity enforced in parent) */}
           <button
             onClick={onToggleWin}
             title={status.is_win ? 'إلغاء تصنيف الفوز' : 'تصنيف كحالة فوز'}
@@ -64,6 +70,21 @@ function StatusRow({ status, onSave, onDelete, onToggleWin }: {
             <Trophy size={11} />
             {status.is_win ? 'فوز' : 'فوز؟'}
           </button>
+
+          {/* Lose badge — clicking sets lose=true, win=false (mutual exclusivity enforced in parent) */}
+          <button
+            onClick={onToggleLose}
+            title={status.is_lose ? 'إلغاء تصنيف الخسارة' : 'تصنيف كحالة خسارة'}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+              status.is_lose
+                ? 'bg-red-100 text-red-700 border border-red-300'
+                : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-red-50 hover:text-red-600'
+            }`}
+          >
+            <ThumbsDown size={11} />
+            {status.is_lose ? 'خسارة' : 'خسارة؟'}
+          </button>
+
           <button onClick={() => { setDraft(status.label); setEditing(true); }} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-indigo-600 rounded transition-opacity"><Edit2 size={14} /></button>
           <button onClick={onDelete} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 rounded transition-opacity"><Trash2 size={14} /></button>
         </>
@@ -86,7 +107,6 @@ export default function CMSSettingsPage() {
   const [saving,   setSaving]   = useState<'statuses' | 'types' | null>(null);
   const [saved,    setSaved]    = useState<'statuses' | 'types' | null>(null);
 
-  // Keep local state in sync when context loads from Firestore
   React.useEffect(() => { setStatuses(contractStatuses); }, [contractStatuses]);
   React.useEffect(() => { setTypes(contractTypes); }, [contractTypes]);
 
@@ -94,35 +114,38 @@ export default function CMSSettingsPage() {
     setSaved(which); setTimeout(() => setSaved(null), 2000);
   };
 
+  const persist = async (next: ContractStatusConfig[]) => {
+    setStatuses(next);
+    setSaving('statuses');
+    await updateContractStatuses(next).finally(() => { setSaving(null); flash('statuses'); });
+  };
+
   // ── Statuses handlers ────────────────────────────────────────────────────────
   const addStatus = async () => {
     if (!newStatus.trim()) return;
-    const next = [...statuses, { id: crypto.randomUUID(), label: newStatus.trim(), is_win: false }];
-    setStatuses(next); setNewStatus('');
-    setSaving('statuses');
-    await updateContractStatuses(next).finally(() => { setSaving(null); flash('statuses'); });
+    await persist([...statuses, { id: crypto.randomUUID(), label: newStatus.trim(), is_win: false, is_lose: false }]);
+    setNewStatus('');
   };
 
-  const saveStatus = async (updated: ContractStatusConfig) => {
-    const next = statuses.map(s => s.id === updated.id ? updated : s);
-    setStatuses(next);
-    setSaving('statuses');
-    await updateContractStatuses(next).finally(() => { setSaving(null); flash('statuses'); });
-  };
+  const saveStatus = (updated: ContractStatusConfig) =>
+    persist(statuses.map(s => s.id === updated.id ? updated : s));
 
-  const deleteStatus = async (id: string) => {
-    const next = statuses.filter(s => s.id !== id);
-    setStatuses(next);
-    setSaving('statuses');
-    await updateContractStatuses(next).finally(() => { setSaving(null); flash('statuses'); });
-  };
+  const deleteStatus = (id: string) =>
+    persist(statuses.filter(s => s.id !== id));
 
-  const toggleWin = async (id: string) => {
-    const next = statuses.map(s => s.id === id ? { ...s, is_win: !s.is_win } : s);
-    setStatuses(next);
-    setSaving('statuses');
-    await updateContractStatuses(next).finally(() => { setSaving(null); flash('statuses'); });
-  };
+  // Toggle win: if already win → clear both; if not win → set win=true, lose=false
+  const toggleWin = (id: string) =>
+    persist(statuses.map(s => s.id === id
+      ? { ...s, is_win: !s.is_win, is_lose: s.is_win ? s.is_lose : false }
+      : s
+    ));
+
+  // Toggle lose: if already lose → clear both; if not lose → set lose=true, win=false
+  const toggleLose = (id: string) =>
+    persist(statuses.map(s => s.id === id
+      ? { ...s, is_lose: !s.is_lose, is_win: s.is_lose ? s.is_win : false }
+      : s
+    ));
 
   // ── Types handlers ───────────────────────────────────────────────────────────
   const addType = async () => {
@@ -158,6 +181,9 @@ export default function CMSSettingsPage() {
     </div>
   );
 
+  const winList  = statuses.filter(s => s.is_win).map(s => s.label);
+  const loseList = statuses.filter(s => s.is_lose).map(s => s.label);
+
   return (
     <div className="p-8 space-y-6 max-w-3xl" dir={isRTL ? 'rtl' : 'ltr'}>
       <h1 className="text-2xl font-bold text-slate-800">{t('إعدادات العقود', 'Contract Settings', lang)}</h1>
@@ -181,23 +207,28 @@ export default function CMSSettingsPage() {
 
         <p className="text-xs text-slate-500 mb-4">
           {t(
-            'حدد حالات عقودك وصنّف بعضها كحالات فوز — تُستخدم في لوحة التحكم والتقارير',
-            'Define your contract statuses and mark some as \u201cwin\u201d \u2014 used in dashboards and reports',
+            'حدد حالات عقودك وصنّف كلاً منها إما فوزاً أو خسارةً — لا يمكن للحالة أن تكون فوزاً وخسارةً في آنٍ واحد',
+            'Define your contract statuses and mark each as win or lose \u2014 a status cannot be both at the same time',
             lang
           )}
         </p>
 
-        {/* Win legend */}
-        <div className="flex items-center gap-2 mb-4 px-2 py-2 bg-emerald-50 border border-emerald-100 rounded-lg">
-          <Trophy size={14} className="text-emerald-600 shrink-0" />
-          <p className="text-xs text-emerald-700">
-            {t(
-              'حالات الفوز الحالية: ',
-              'Current win statuses: ',
-              lang
-            )}
-            <strong>{statuses.filter(s => s.is_win).map(s => s.label).join(' ، ') || t('لا يوجد', 'none', lang)}</strong>
-          </p>
+        {/* Win / Lose legend */}
+        <div className="flex flex-col gap-2 mb-4">
+          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg">
+            <Trophy size={13} className="text-emerald-600 shrink-0" />
+            <p className="text-xs text-emerald-700">
+              {t('حالات الفوز: ', 'Win statuses: ', lang)}
+              <strong>{winList.join(' ، ') || t('لا يوجد', 'none', lang)}</strong>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
+            <ThumbsDown size={13} className="text-red-500 shrink-0" />
+            <p className="text-xs text-red-700">
+              {t('حالات الخسارة: ', 'Lose statuses: ', lang)}
+              <strong>{loseList.join(' ، ') || t('لا يوجد', 'none', lang)}</strong>
+            </p>
+          </div>
         </div>
 
         <div className="space-y-1 mb-4">
@@ -208,6 +239,7 @@ export default function CMSSettingsPage() {
               onSave={saveStatus}
               onDelete={() => deleteStatus(s.id)}
               onToggleWin={() => toggleWin(s.id)}
+              onToggleLose={() => toggleLose(s.id)}
             />
           ))}
         </div>
@@ -252,7 +284,6 @@ export default function CMSSettingsPage() {
           ))}
         </div>
 
-        {/* Add new type */}
         <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
           <input
             value={newType}
@@ -273,9 +304,11 @@ export default function CMSSettingsPage() {
       <div className="bg-slate-50 rounded-xl border border-slate-200 p-5 space-y-2 text-sm text-slate-600">
         <p className="font-semibold text-slate-700">{t('ملاحظات', 'Notes', lang)}</p>
         <ul className="space-y-1.5">
-          <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" /><span>{t('تُحفظ التغييرات فورياً في Firestore وتنعكس على جميع المستخدمين فورياً', 'Changes are saved instantly to Firestore and reflect for all users immediately', lang)}</span></li>
+          <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" /><span>{t('تُحفظ التغييرات فورياً وتنعكس على جميع المستخدمين فوراً', 'Changes save instantly and reflect for all users immediately', lang)}</span></li>
           <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" /><span>{t('حذف حالة لا يحذف العقود التي تستخدمها بالفعل', 'Deleting a status does not affect contracts already using it', lang)}</span></li>
-          <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" /><span>{t('تستخدم حالات الفوز في إحصائيات لوحة التحكم لحساب نسبة النجاح', 'Win statuses are used in dashboard KPIs to calculate success rate', lang)}</span></li>
+          <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-1.5 shrink-0" /><span>{t('حالات الفوز تُحسب في نسبة النجاح بلوحة التحكم', 'Win statuses count toward the success rate in dashboards', lang)}</span></li>
+          <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 bg-red-400 rounded-full mt-1.5 shrink-0" /><span>{t('حالات الخسارة تُحسب في نسبة العقود الخاسرة بلوحة التحكم', 'Lose statuses count toward the lost contracts rate in dashboards', lang)}</span></li>
+          <li className="flex items-start gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" /><span>{t('لا يمكن للحالة أن تكون فوزاً وخسارةً في آنٍ واحد — اختيار أحدهما يلغي الآخر تلقائياً', 'A status cannot be win and lose simultaneously — choosing one clears the other automatically', lang)}</span></li>
         </ul>
       </div>
     </div>
