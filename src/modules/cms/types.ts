@@ -21,13 +21,14 @@ export interface PartyOneEntity {
 }
 
 // ── Contract status config ────────────────────────────────────────────────────
-// Each status has a label (Arabic) and an optional "win" flag.
-// Win statuses are used in dashboards/analytics to count successful contracts.
+// is_win and is_lose are mutually exclusive — a status cannot be both.
+// Neutral statuses have both flags false (draft, under review, expired, etc.).
 export interface ContractStatusConfig {
   id: string;        // stable slug, e.g. "signed"
   label: string;     // display text in Arabic, e.g. "موقّع"
-  is_win: boolean;   // counts as a won/active contract in KPIs
-  color?: string;    // optional tailwind color key for badges, e.g. "green"
+  is_win: boolean;   // counts as a won contract in KPIs
+  is_lose: boolean;  // counts as a lost contract in KPIs
+  color?: string;    // optional tailwind color key for badges
 }
 
 export interface AppSettings {
@@ -223,13 +224,15 @@ export interface ContractTemplate {
 
 // ── Default lists (used when no custom config exists in Firestore) ─────────────
 export const DEFAULT_CONTRACT_STATUSES: ContractStatusConfig[] = [
-  { id: 'draft',     label: 'مسودة',           is_win: false, color: 'gray' },
-  { id: 'review',    label: 'قيد المراجعة',      is_win: false, color: 'yellow' },
-  { id: 'approved',  label: 'معتمد',           is_win: false, color: 'blue' },
-  { id: 'signed',    label: 'موقّع',           is_win: true,  color: 'emerald' },
-  { id: 'active',    label: 'نشط',             is_win: true,  color: 'green' },
-  { id: 'completed', label: 'مكتمل',           is_win: true,  color: 'teal' },
-  { id: 'expired',   label: 'منتهي',           is_win: false, color: 'red' },
+  { id: 'draft',     label: 'مسودة',       is_win: false, is_lose: false, color: 'gray' },
+  { id: 'review',    label: 'قيد المراجعة', is_win: false, is_lose: false, color: 'yellow' },
+  { id: 'approved',  label: 'معتمد',      is_win: false, is_lose: false, color: 'blue' },
+  { id: 'signed',    label: 'موقّع',      is_win: true,  is_lose: false, color: 'emerald' },
+  { id: 'active',    label: 'نشط',        is_win: true,  is_lose: false, color: 'green' },
+  { id: 'completed', label: 'مكتمل',      is_win: true,  is_lose: false, color: 'teal' },
+  { id: 'expired',   label: 'منتهي',      is_win: false, is_lose: false, color: 'orange' },
+  { id: 'cancelled', label: 'ملغى',      is_win: false, is_lose: true,  color: 'red' },
+  { id: 'lost',      label: 'خسارة',      is_win: false, is_lose: true,  color: 'red' },
 ];
 
 export const DEFAULT_CONTRACT_TYPES: string[] = [

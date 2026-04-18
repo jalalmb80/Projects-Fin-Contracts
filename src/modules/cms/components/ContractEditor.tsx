@@ -8,6 +8,7 @@ import { toHijri } from '../utils/hijriDate';
 import { exportContractToPdf, generatePdfBlob } from '../utils/exportPdf';
 import { initGoogleDrive, requestDriveAccess, isConnected, uploadPdfToDrive } from '../services/googleDrive';
 import { platformBus, PLATFORM_EVENTS } from '../../../core/events/platformBus';
+import CreateFinanceProjectModal from './CreateFinanceProjectModal';
 
 type Tab = 'metadata' | 'articles' | 'payments' | 'appendices' | 'attachments' | 'versions' | 'preview';
 
@@ -43,8 +44,7 @@ export default function ContractEditor({
   projects, clients, templates, onSaveTemplate
 }: ContractEditorProps) {
   const { lang } = useLang();
-  // Read dynamic lists at top level so handleSelectTemplate can use them
-  const { contractTypes, contractStatuses } = useSettings();
+  const { contractTypes, contractStatuses, winStatuses } = useSettings();
   const [activeTab, setActiveTab] = useState<Tab>('metadata');
   const [contract, setContract] = useState<Contract | null>(null);
   const [isSelectingTemplate, setIsSelectingTemplate] = useState(!contractId);
@@ -52,6 +52,12 @@ export default function ContractEditor({
   const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
   const [saveAsTemplateFeedback, setSaveAsTemplateFeedback] = useState<'success' | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // ── Finance project creation prompt ──────────────────────────────────────────────
+  // Shown when the contract status is changed to a win status
+  const [showFinanceModal, setShowFinanceModal] = useState(false);
+  // contractForModal: snapshot at the moment the win status was selected
+  const [contractForModal, setContractForModal] = useState<Contract | null>(null);
 
   useEffect(() => {
     if (contractId) {
@@ -67,10 +73,8 @@ export default function ContractEditor({
   }, [clients, contract?.client_id]);
 
   const handleSelectTemplate = (template: ContractTemplate | null) => {
-    // Use dynamic lists — fall back to Arabic hardcoded only if context hasn't loaded yet
     const defaultType   = contractTypes[0] ?? 'تطوير برمجيات';
     const defaultStatus = contractStatuses.find(s => !s.is_win)?.label ?? 'مسودة';
-
     const newContract: Contract = {
       id: Date.now().toString(),
       contract_number: `CMS-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
@@ -245,6 +249,24 @@ export default function ContractEditor({
         </div>
       )}
 
+      {/* ── Finance project creation modal ── */}
+      {showFinanceModal && contractForModal && (() => {
+        const client = (clients || []).find((c: any) => c.id === contractForModal.client_id);
+        return (
+          <CreateFinanceProjectModal
+            contract={contractForModal}
+            clientName={client?.name_ar ?? ''}
+            clientId={contractForModal.client_id}
+            lang={lang}
+            onClose={() => setShowFinanceModal(false)}
+            onCreated={(_projectId) => {
+              // Optionally link the project back to the contract in state
+              setContract(prev => prev ? { ...prev, project_id: _projectId } : prev);
+            }}
+          />
+        );
+      })()}
+
       <div className="flex flex-1 overflow-hidden">
         <div className="w-64 bg-white border-l border-slate-200 flex flex-col shrink-0 no-print">
           <div className="p-4 space-y-1">
@@ -261,7 +283,7 @@ export default function ContractEditor({
         </div>
         <div className="flex-1 overflow-auto p-8">
           <div className="max-w-4xl mx-auto">
-            {activeTab === 'metadata'    && <MetadataEditor    contract={contract} setContract={setContract} lang={lang} projects={projects} clients={clients} templates={templates} />}
+            {activeTab === 'metadata'    && <MetadataEditor    contract={contract} setContract={setContract} lang={lang} projects={projects} clients={clients} templates={templates} winStatuses={winStatuses} onWinStatusSelected={(c) => { setContractForModal(c); setShowFinanceModal(true); }} />}
             {activeTab === 'articles'    && <ArticlesEditor    contract={contract} setContract={setContract} lang={lang} />}
             {activeTab === 'payments'    && <PaymentsEditor    contract={contract} setContract={setContract} lang={lang} />}
             {activeTab === 'appendices'  && <AppendicesEditor  contract={contract} setContract={setContract} lang={lang} />}
@@ -277,12 +299,36 @@ export default function ContractEditor({
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MetadataEditor — reads types & statuses dynamically from SettingsContext
+// Gets winStatuses + onWinStatusSelected callback from ContractEditor parent
 // ─────────────────────────────────────────────────────────────────────────────
-function MetadataEditor({ contract, setContract, lang, projects, clients, templates }: any) {
-  const { settings, getDefaultEntity, contractTypes, contractStatuses, winStatuses } = useSettings();
+function MetadataEditor({ contract, setContract, lang, projects, clients, templates, winStatuses, onWinStatusSelected }: any) {
+  const { settings, getDefaultEntity, contractTypes, contractStatuses } = useSettings();
   const selectedProject = projects?.find((p: any) => p.id === contract.project_id);
   const showClientWarning = selectedProject && selectedProject.client_id !== contract.client_id;
   const selectedTemplate = templates?.find((tpl: ContractTemplate) => tpl.id === contract.template_id);
+
+  const handleStatusChange = (newStatus: string) => {
+    const wasWin = winStatuses.includes(contract.status);
+    const isNowWin = winStatuses.includes(newStatus);
+    setContract({ ...contract, status: newStatus });
+
+    // Emit bus event (for any other listeners)
+    if (isNowWin) {
+      platformBus.emit(PLATFORM_EVENTS.CONTRACT_SIGNED, {
+        contractId: contract.id,
+        contractTitle: contract.title_ar,
+        counterpartyId: contract.client_id,
+        projectId: contract.project_id,
+        amount: contract.payment_schedule.total_sar,
+        currency: 'SAR',
+      });
+    }
+
+    // Only prompt when NEWLY entering a win status (not already win)
+    if (isNowWin && !wasWin) {
+      onWinStatusSelected({ ...contract, status: newStatus });
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-8">
@@ -303,7 +349,7 @@ function MetadataEditor({ contract, setContract, lang, projects, clients, templa
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700">{t('نوع العقد', 'Contract Type', lang)}</label>
             <select value={contract.type} onChange={e => setContract({...contract, type: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
-              {contractTypes.map(type => (
+              {contractTypes.map((type: string) => (
                 <option key={type} value={type}>{type}</option>
               ))}
             </select>
@@ -335,22 +381,8 @@ function MetadataEditor({ contract, setContract, lang, projects, clients, templa
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700">{t('حالة العقد', 'Status', lang)}</label>
-            <select value={contract.status} onChange={e => {
-              const s = e.target.value;
-              setContract({...contract, status: s});
-              // Fire CONTRACT_SIGNED for any status marked as win in settings (not just hardcoded 'موقّع')
-              if (winStatuses.includes(s)) {
-                platformBus.emit(PLATFORM_EVENTS.CONTRACT_SIGNED, {
-                  contractId: contract.id,
-                  contractTitle: contract.title_ar,
-                  counterpartyId: contract.client_id,
-                  projectId: contract.project_id,
-                  amount: contract.payment_schedule.total_sar,
-                  currency: 'SAR',
-                });
-              }
-            }} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
-              {contractStatuses.map(s => (
+            <select value={contract.status} onChange={e => handleStatusChange(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+              {contractStatuses.map((s: any) => (
                 <option key={s.id} value={s.label}>
                   {s.label}{s.is_win ? ' 🏆' : ''}
                 </option>
@@ -490,11 +522,11 @@ export function ArticlesEditor({ contract, setContract, lang }: any) {
                               <option value="alpha">{t('أبجدية', 'Alpha', lang)}</option>
                             </select>
                           </div>
-                          {block.items.map((item, iIndex) => (
+                          {block.items.map((item: any, iIndex: number) => (
                             <div key={item.id} className="flex items-start space-x-2 space-x-reverse">
                               <span className="mt-2 text-slate-400 text-xs w-4 text-center">{block.style === 'ordered' ? `${iIndex + 1}.` : block.style === 'alpha' ? `${String.fromCharCode(1575 + iIndex)}.` : '•'}</span>
                               <input type="text" dir="rtl" value={item.text_ar} onChange={e => { const ni = [...block.items]; ni[iIndex].text_ar = e.target.value; updateBlock(article.id, block.id, { items: ni }); }} disabled={article.is_locked} className="flex-1 p-1.5 border-b border-transparent hover:border-slate-200 focus:border-emerald-500 bg-transparent outline-none" />
-                              {!article.is_locked && <button onClick={() => updateBlock(article.id, block.id, { items: block.items.filter((_, i) => i !== iIndex) })} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14} /></button>}
+                              {!article.is_locked && <button onClick={() => updateBlock(article.id, block.id, { items: block.items.filter((_: any, i: number) => i !== iIndex) })} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14} /></button>}
                             </div>
                           ))}
                           {!article.is_locked && <button onClick={() => updateBlock(article.id, block.id, { items: [...block.items, { id: Date.now().toString(), text_ar: '' }] })} className="text-xs text-emerald-600 font-medium flex items-center space-x-1 space-x-reverse mt-2"><Plus size={12} /> <span>{t('إضافة عنصر', 'Add item', lang)}</span></button>}
@@ -859,8 +891,8 @@ function ContractPreview({ contract, lang, projects, clients }: any) {
                 {article.blocks&&article.blocks.length>0 ? (
                   <div className="space-y-4">
                     {article.blocks.map((block: ArticleBlock) => {
-                      if (block.type==='paragraph') { const bt = article.article_type==='نسخ الاتفاقية' ? repl(block.text_ar||'') : block.text_ar; return <p key={block.id} className="whitespace-pre-wrap leading-relaxed text-justify">{bt}</p>; }
-                      if (block.type==='list') { const LT = block.style==='ordered'||block.style==='alpha'?'ol':'ul'; const lc = block.style==='ordered'?'list-decimal':block.style==='alpha'?'list-[lower-alpha]':'list-disc'; return <LT key={block.id} className={`${lc} list-inside space-y-2 mr-4 leading-relaxed text-justify`}>{block.items.map(i=><li key={i.id}>{i.text_ar}</li>)}</LT>; }
+                      if (block.type==='مقدمة' || block.type==='paragraph') { const bt = article.article_type==='نسخ الاتفاقية' ? repl((block as any).text_ar||'') : (block as any).text_ar; return <p key={block.id} className="whitespace-pre-wrap leading-relaxed text-justify">{bt}</p>; }
+                      if (block.type==='list') { const bl = block as any; const LT = bl.style==='ordered'||bl.style==='alpha'?'ol':'ul'; const lc = bl.style==='ordered'?'list-decimal':bl.style==='alpha'?'list-[lower-alpha]':'list-disc'; return <LT key={block.id} className={`${lc} list-inside space-y-2 mr-4 leading-relaxed text-justify`}>{bl.items.map((i: any)=><li key={i.id}>{i.text_ar}</li>)}</LT>; }
                       if (block.type==='page_break') return <div key={block.id} className="contract-page-break">{t('فاصل صفحة','Page break',lang)}</div>;
                       return null;
                     })}

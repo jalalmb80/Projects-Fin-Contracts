@@ -43,7 +43,8 @@ interface SettingsContextType {
   // Contract config helpers
   contractStatuses: ContractStatusConfig[];
   contractTypes: string[];
-  winStatuses: string[];  // labels of statuses where is_win === true
+  winStatuses: string[];   // labels where is_win === true
+  loseStatuses: string[];  // labels where is_lose === true
   updateContractStatuses: (statuses: ContractStatusConfig[]) => Promise<void>;
   updateContractTypes: (types: string[]) => Promise<void>;
 }
@@ -56,7 +57,8 @@ const SettingsContext = createContext<SettingsContextType>({
   getEntityById: () => undefined,
   contractStatuses: DEFAULT_CONTRACT_STATUSES,
   contractTypes: DEFAULT_CONTRACT_TYPES,
-  winStatuses: DEFAULT_CONTRACT_STATUSES.filter(s => s.is_win).map(s => s.label),
+  winStatuses:  DEFAULT_CONTRACT_STATUSES.filter(s => s.is_win).map(s => s.label),
+  loseStatuses: DEFAULT_CONTRACT_STATUSES.filter(s => s.is_lose).map(s => s.label),
   updateContractStatuses: async () => {},
   updateContractTypes: async () => {},
 });
@@ -77,12 +79,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (snap.exists()) {
           const data = snap.data();
           setVatRate(data.default_vat_rate ?? 15);
-          if (Array.isArray(data.contract_statuses) && data.contract_statuses.length > 0)
-            setContractStatuses(data.contract_statuses);
+          if (Array.isArray(data.contract_statuses) && data.contract_statuses.length > 0) {
+            // Back-compat: old records may not have is_lose, default to false
+            setContractStatuses(
+              data.contract_statuses.map((s: ContractStatusConfig) => ({
+                ...s,
+                is_lose: s.is_lose ?? false,
+              }))
+            );
+          }
           if (Array.isArray(data.contract_types) && data.contract_types.length > 0)
             setContractTypes(data.contract_types);
         } else {
-          // Legacy path
           const legacySnap = await getDoc(doc(db, 'cms_settings', 'entities'));
           if (legacySnap.exists()) setVatRate(legacySnap.data().default_vat_rate ?? 15);
         }
@@ -119,7 +127,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     await persistConfig({ contract_types: types });
   };
 
-  const winStatuses = contractStatuses.filter(s => s.is_win).map(s => s.label);
+  const winStatuses  = contractStatuses.filter(s => s.is_win).map(s => s.label);
+  const loseStatuses = contractStatuses.filter(s => s.is_lose).map(s => s.label);
 
   const getDefaultEntity = (): PartyOneEntity =>
     settings.entities.find(e => e.is_default) || settings.entities[0] || DEFAULT_ENTITY;
@@ -137,6 +146,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       contractStatuses,
       contractTypes,
       winStatuses,
+      loseStatuses,
       updateContractStatuses,
       updateContractTypes,
     }}>
