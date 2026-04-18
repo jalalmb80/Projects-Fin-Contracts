@@ -10,25 +10,40 @@ export interface PartyOneEntity {
   po_box?: string;
   phone: string;
   email: string;
-  logo_base64?: string;           // base64 encoded logo image
-  primary_color: string;          // hex e.g. "#059669"
-  secondary_color: string;        // hex e.g. "#f0fdf4"
-  accent_color: string;           // hex e.g. "#064e3b"
+  logo_base64?: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
   bank_iban: string;
   bank_name: string;
   account_holder: string;
   is_default: boolean;
 }
 
+// ── Contract status config ────────────────────────────────────────────────────
+// Each status has a label (Arabic) and an optional "win" flag.
+// Win statuses are used in dashboards/analytics to count successful contracts.
+export interface ContractStatusConfig {
+  id: string;        // stable slug, e.g. "signed"
+  label: string;     // display text in Arabic, e.g. "موقّع"
+  is_win: boolean;   // counts as a won/active contract in KPIs
+  color?: string;    // optional tailwind color key for badges, e.g. "green"
+}
+
 export interface AppSettings {
   entities: PartyOneEntity[];
   default_vat_rate: number;
+  // Dynamic lists — managed from Contract Settings page
+  contract_statuses: ContractStatusConfig[];
+  contract_types: string[];
 }
 
-export type ContractStatus = 'مسودة' | 'قيد المراجعة' | 'معتمد' | 'موقّع' | 'نشط' | 'مكتمل' | 'منتهي';
-export type ContractType = 'تطوير برمجيات' | 'اشتراك/SaaS' | 'إنتاج محتوى' | 'مختلط';
+// Runtime types — kept as string so dynamic values from settings work everywhere
+export type ContractStatus = string;
+export type ContractType   = string;
+
 export type AppendixType = 'قائمة الخدمات' | 'التهيئة التقنية' | 'العرض الفني' | 'قائمة الأسعار' | 'أخرى';
-export type ArticleType = 'تمهيد' | 'موضوع' | 'مدة التنفيذ' | 'القيمة والدفعات' | 'الملكية الفكرية' | 'إدارة المشروع' | 'طلبات التغيير' | 'إنهاء الاتفاقية' | 'أحكام عامة' | 'نسخ الاتفاقية' | 'مخصص';
+export type ArticleType  = 'تمهيد' | 'موضوع' | 'مدة التنفيذ' | 'القيمة والدفعات' | 'الملكية الفكرية' | 'إدارة المشروع' | 'طلبات التغيير' | 'إنهاء الاتفاقية' | 'أحكام عامة' | 'نسخ الاتفاقية' | 'مخصص';
 
 export type ArticleBlockType = 'paragraph' | 'list' | 'page_break';
 
@@ -165,9 +180,9 @@ export interface Project {
 
 export interface Contract {
   id: string;
-  entity_id?: string;   // references PartyOneEntity.id
-  project_id?: string;  // references Project.id
-  template_id?: string; // references ContractTemplate.id
+  entity_id?: string;
+  project_id?: string;
+  template_id?: string;
   contract_number: string;
   title_ar: string;
   type: ContractType;
@@ -205,3 +220,21 @@ export interface ContractTemplate {
   tags?: string[];
   is_default?: boolean;
 }
+
+// ── Default lists (used when no custom config exists in Firestore) ─────────────
+export const DEFAULT_CONTRACT_STATUSES: ContractStatusConfig[] = [
+  { id: 'draft',     label: 'مسودة',           is_win: false, color: 'gray' },
+  { id: 'review',    label: 'قيد المراجعة',      is_win: false, color: 'yellow' },
+  { id: 'approved',  label: 'معتمد',           is_win: false, color: 'blue' },
+  { id: 'signed',    label: 'موقّع',           is_win: true,  color: 'emerald' },
+  { id: 'active',    label: 'نشط',             is_win: true,  color: 'green' },
+  { id: 'completed', label: 'مكتمل',           is_win: true,  color: 'teal' },
+  { id: 'expired',   label: 'منتهي',           is_win: false, color: 'red' },
+];
+
+export const DEFAULT_CONTRACT_TYPES: string[] = [
+  'تطوير برمجيات',
+  'اشتراك/SaaS',
+  'إنتاج محتوى',
+  'مختلط',
+];
