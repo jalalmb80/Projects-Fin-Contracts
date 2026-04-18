@@ -43,6 +43,8 @@ export default function ContractEditor({
   projects, clients, templates, onSaveTemplate
 }: ContractEditorProps) {
   const { lang } = useLang();
+  // Read dynamic lists at top level so handleSelectTemplate can use them
+  const { contractTypes, contractStatuses } = useSettings();
   const [activeTab, setActiveTab] = useState<Tab>('metadata');
   const [contract, setContract] = useState<Contract | null>(null);
   const [isSelectingTemplate, setIsSelectingTemplate] = useState(!contractId);
@@ -65,12 +67,16 @@ export default function ContractEditor({
   }, [clients, contract?.client_id]);
 
   const handleSelectTemplate = (template: ContractTemplate | null) => {
+    // Use dynamic lists — fall back to Arabic hardcoded only if context hasn't loaded yet
+    const defaultType   = contractTypes[0] ?? 'تطوير برمجيات';
+    const defaultStatus = contractStatuses.find(s => !s.is_win)?.label ?? 'مسودة';
+
     const newContract: Contract = {
       id: Date.now().toString(),
       contract_number: `CMS-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
       title_ar: template ? template.name_ar : 'عقد جديد',
-      type: template ? template.default_type : 'تطوير برمجيات',
-      status: template ? template.default_status : 'مسودة',
+      type:   template ? template.default_type   : defaultType,
+      status: template ? template.default_status : defaultStatus,
       client_id: (clients || [])[0]?.id || '',
       start_date: new Date().toISOString().split('T')[0],
       end_date: '',
@@ -169,9 +175,10 @@ export default function ContractEditor({
 
   const confirmSaveAsTemplate = async () => {
     if (!saveAsTemplateName.trim()) return;
+    const defaultStatus = contractStatuses.find(s => !s.is_win)?.label ?? 'مسودة';
     const newTpl: ContractTemplate = {
       id: Date.now().toString(), name_ar: saveAsTemplateName.trim(), category: 'مخصص',
-      default_status: 'مسودة', default_type: contract.type,
+      default_status: defaultStatus, default_type: contract.type,
       default_articles: JSON.parse(JSON.stringify(contract.articles)),
       default_payment_schedule: JSON.parse(JSON.stringify(contract.payment_schedule)),
       default_appendices: JSON.parse(JSON.stringify(contract.appendices)),
@@ -269,10 +276,10 @@ export default function ContractEditor({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MetadataEditor
+// MetadataEditor — reads types & statuses dynamically from SettingsContext
 // ─────────────────────────────────────────────────────────────────────────────
 function MetadataEditor({ contract, setContract, lang, projects, clients, templates }: any) {
-  const { settings, getDefaultEntity } = useSettings();
+  const { settings, getDefaultEntity, contractTypes, contractStatuses, winStatuses } = useSettings();
   const selectedProject = projects?.find((p: any) => p.id === contract.project_id);
   const showClientWarning = selectedProject && selectedProject.client_id !== contract.client_id;
   const selectedTemplate = templates?.find((tpl: ContractTemplate) => tpl.id === contract.template_id);
@@ -296,10 +303,9 @@ function MetadataEditor({ contract, setContract, lang, projects, clients, templa
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700">{t('نوع العقد', 'Contract Type', lang)}</label>
             <select value={contract.type} onChange={e => setContract({...contract, type: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
-              <option value="تطوير برمجيات">تطوير برمجيات</option>
-              <option value="اشتراك/SaaS">اشتراك/SaaS</option>
-              <option value="إنتاج محتوى">إنتاج محتوى</option>
-              <option value="مختلط">مختلط</option>
+              {contractTypes.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
@@ -330,10 +336,25 @@ function MetadataEditor({ contract, setContract, lang, projects, clients, templa
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700">{t('حالة العقد', 'Status', lang)}</label>
             <select value={contract.status} onChange={e => {
-              const s = e.target.value; setContract({...contract, status: s});
-              if (s === 'موقّع') platformBus.emit(PLATFORM_EVENTS.CONTRACT_SIGNED, { contractId: contract.id, contractTitle: contract.title_ar, counterpartyId: contract.client_id, projectId: contract.project_id, amount: contract.payment_schedule.total_sar, currency: 'SAR' });
+              const s = e.target.value;
+              setContract({...contract, status: s});
+              // Fire CONTRACT_SIGNED for any status marked as win in settings (not just hardcoded 'موقّع')
+              if (winStatuses.includes(s)) {
+                platformBus.emit(PLATFORM_EVENTS.CONTRACT_SIGNED, {
+                  contractId: contract.id,
+                  contractTitle: contract.title_ar,
+                  counterpartyId: contract.client_id,
+                  projectId: contract.project_id,
+                  amount: contract.payment_schedule.total_sar,
+                  currency: 'SAR',
+                });
+              }
             }} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
-              {['مسودة','قيد المراجعة','معتمد','موقّع','نشط','مكتمل','منتهي'].map(s => <option key={s} value={s}>{s}</option>)}
+              {contractStatuses.map(s => (
+                <option key={s.id} value={s.label}>
+                  {s.label}{s.is_win ? ' 🏆' : ''}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
