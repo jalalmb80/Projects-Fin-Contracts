@@ -7,22 +7,93 @@ export interface PdfExportOptions {
 }
 
 /**
- * WHY THE CLONE APPROACH:
+ * Tailwind v4 uses oklch() color values throughout its CSS custom properties.
+ * html2canvas does not support oklch() and throws immediately when it
+ * encounters one. The fix is to resolve every computed color on every element
+ * in the clone to an rgb/rgba string using a throwaway canvas (which the
+ * browser resolves correctly), then inline those values as style attributes
+ * before handing the clone to html2canvas.
  *
- * #contract-preview lives inside ContractEditor's `div.flex-1.overflow-auto`
- * scroll panel. html2canvas traverses the DOM and inherits the overflow/clip
- * context from every ancestor, so even scrolled to 0 the canvas is clipped to
- * the scroll-container's visible height.
- *
- * Solution: clone the element into a body-level off-screen wrapper before
- * calling html2canvas. At body level there are no scroll-container ancestors,
- * so the full element height is captured in one pass.
- *
- * WIDTH NOTE:
- * getBoundingClientRect().width returns 0 when the element is itself off-screen
- * (e.g. ContractPreviewPortal in download mode renders at left:-9999px).
- * We therefore prefer scrollWidth, then offsetWidth, then fall back to 960.
+ * The color properties we care about for a contract PDF:
+ *   color, background-color, border-color (all four sides), outline-color,
+ *   fill, stroke, text-decoration-color, caret-color
  */
+
+// ── oklch resolver ─────────────────────────────────────────────────────────────
+// A single shared off-screen canvas element used to resolve oklch → rgb.
+let _resolverCtx: CanvasRenderingContext2D | null = null;
+function getResolverCtx(): CanvasRenderingContext2D {
+  if (!_resolverCtx) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    _resolverCtx = c.getContext('2d')!;
+  }
+  return _resolverCtx;
+}
+
+/**
+ * If `color` contains "oklch", ask the browser to resolve it to an rgb string
+ * by painting a 1x1 canvas with that color and reading the result back.
+ * Returns the original string unchanged for anything the browser can’t paint
+ * or that doesn’t contain "oklch".
+ */
+function resolveColor(color: string): string {
+  if (!color || !color.includes('oklch')) return color;
+  try {
+    const ctx = getResolverCtx();
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    // getImageData gives us [r, g, b, a]
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+    return a < 255
+      ? `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`
+      : `rgb(${r},${g},${b})`;
+  } catch {
+    return color;
+  }
+}
+
+const COLOR_PROPS = [
+  'color',
+  'backgroundColor',
+  'borderTopColor',
+  'borderRightColor',
+  'borderBottomColor',
+  'borderLeftColor',
+  'outlineColor',
+  'textDecorationColor',
+  'caretColor',
+  'fill',
+  'stroke',
+] as const;
+
+/**
+ * Walk every element in `root` and replace any oklch computed color with its
+ * resolved rgb equivalent inlined as a style attribute.
+ * Only touches elements that actually have an oklch value — skips everything
+ * else to keep the pass fast.
+ */
+function resolveOklchColors(root: HTMLElement): void {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  let node: Node | null = walker.currentNode;
+  while (node) {
+    const el = node as HTMLElement;
+    if (el.style !== undefined) {
+      const computed = window.getComputedStyle(el);
+      for (const prop of COLOR_PROPS) {
+        const value = computed[prop as keyof CSSStyleDeclaration] as string;
+        if (value && value.includes('oklch')) {
+          (el.style as any)[prop] = resolveColor(value);
+        }
+      }
+    }
+    node = walker.nextNode();
+  }
+}
+
+// ── public API ───────────────────────────────────────────────────────────────
+
 export async function exportContractToPdf(
   elementId: string,
   options: PdfExportOptions = {}
@@ -45,21 +116,20 @@ export async function generatePdfBlob(elementId: string): Promise<Blob> {
   const source = document.getElementById(elementId);
   if (!source) throw new Error(`Element #${elementId} not found`);
 
-  // ── 1. Resolve width ─────────────────────────────────────────────────────────────
-  // Prefer scrollWidth/offsetWidth over getBoundingClientRect because the
-  // source element may be positioned off-screen (left:-9999px) and
-  // getBoundingClientRect returns 0 in that case.
+  // ── 1. Resolve source width ─────────────────────────────────────────────────
+  // getBoundingClientRect returns 0 when the element is off-screen, so prefer
+  // scrollWidth / offsetWidth first.
   const sourceWidth =
     source.scrollWidth ||
     source.offsetWidth ||
     Math.round(source.getBoundingClientRect().width) ||
     960;
 
-  // ── 2. Clone into a body-level off-screen wrapper ──────────────────────────
+  // ── 2. Clone into a body-level off-screen wrapper ─────────────────────────
   const wrapper = document.createElement('div');
   Object.assign(wrapper.style, {
-    position:      'fixed',       // fixed keeps it in the viewport layer but
-    top:           '0px',         // we immediately move it off-screen below
+    position:      'fixed',
+    top:           '0px',
     left:          '-10000px',
     width:         `${Math.round(sourceWidth)}px`,
     background:    '#ffffff',
@@ -69,36 +139,34 @@ export async function generatePdfBlob(elementId: string): Promise<Blob> {
   });
 
   const clone = source.cloneNode(true) as HTMLElement;
-  // Strip the sticky/fixed toolbar so it doesn’t affect layout.
   clone.querySelectorAll('.no-print').forEach(el => (el as HTMLElement).remove());
-
-  // Reset any transform/translate on the clone itself.
   clone.style.transform = 'none';
   clone.style.position  = 'static';
 
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
 
-  // ── 3. Wait for layout: 2 rAF + 200 ms ─────────────────────────────────
+  // ── 3. Wait for layout (2 rAF + 300 ms for fonts/images) ──────────────────
   await new Promise<void>(resolve =>
     requestAnimationFrame(() =>
       requestAnimationFrame(() =>
-        setTimeout(resolve, 200)
+        setTimeout(resolve, 300)
       )
     )
   );
 
-  // ── 4. Measure the clone’s actual rendered height ──────────────────────────
-  // Use the wrapper’s scrollHeight so we capture the full document height.
+  // ── 4. Resolve all oklch colors ────────────────────────────────────────────
+  // Must be done AFTER the wrapper is in the DOM (so getComputedStyle works)
+  // and BEFORE calling html2canvas.
+  resolveOklchColors(wrapper);
+
+  // ── 5. Measure actual rendered dimensions ──────────────────────────────
   const captureWidth  = wrapper.scrollWidth  || sourceWidth;
   const captureHeight = wrapper.scrollHeight || clone.scrollHeight || 1200;
-
-  // Resize wrapper to exactly match measured dimensions (prevents html2canvas
-  // from clipping if the element grew taller than the initial estimate).
   wrapper.style.width  = `${captureWidth}px`;
   wrapper.style.height = `${captureHeight}px`;
 
-  // ── 5. Capture ──────────────────────────────────────────────────────────────────
+  // ── 6. Capture ───────────────────────────────────────────────────────────────
   let canvas: HTMLCanvasElement;
   try {
     canvas = await html2canvas(wrapper, {
@@ -122,10 +190,10 @@ export async function generatePdfBlob(elementId: string): Promise<Blob> {
     throw new Error('html2canvas produced an empty canvas — nothing to export');
   }
 
-  // ── 6. Slice canvas into A4 pages ─────────────────────────────────────────────
-  const MARGIN   = 10;   // mm
-  const USABLE_W = 190;  // mm (210 - 2×10)
-  const USABLE_H = 277;  // mm (297 - 2×10)
+  // ── 7. Slice canvas into A4 pages ─────────────────────────────────────────
+  const MARGIN   = 10;
+  const USABLE_W = 190;
+  const USABLE_H = 277;
 
   const scaledHeightMm = (canvas.height / canvas.width) * USABLE_W;
 
