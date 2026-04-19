@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
 import {
   collection, onSnapshot, query, orderBy,
-  doc, setDoc, updateDoc, deleteDoc
+  doc, setDoc, updateDoc, deleteDoc,
 } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
-import { Contract, Client, ContractTemplate, Project } from '../types';
+import { Contract, Client, ContractTemplate, Project, WorkflowEvent } from '../types';
 import { usePlatform } from '../../../core/context/PlatformContext';
 import { useSharedClients } from '../../../core/hooks/useSharedClients';
 
 export function useContracts() {
   const { user } = usePlatform();
 
-  // Clients sourced from shared_clients (replaces cms_clients onSnapshot).
-  // asCmsClients has the same shape as the old Client[] — ContractEditor is unchanged.
   const {
     asCmsClients,
     addClient: addSharedClient,
@@ -26,15 +24,15 @@ export function useContracts() {
   const [loading,    setLoading]    = useState(true);
 
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    if (!user) { setLoading(false); return; }
 
     const unsubs = [
       onSnapshot(
         query(collection(db, 'cms_contracts'), orderBy('start_date', 'desc')),
-        snap => { setContracts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Contract))); setLoading(false); },
+        snap => {
+          setContracts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Contract)));
+          setLoading(false);
+        },
         error => { console.error('[useContracts] contracts error:', error.code); setLoading(false); }
       ),
       onSnapshot(
@@ -60,8 +58,28 @@ export function useContracts() {
   const deleteContract = async (id: string) =>
     deleteDoc(doc(db, 'cms_contracts', id));
 
-  // Client CRUD now proxied through shared_clients.
-  // New clients created here will appear in both Finance and CMS client lists.
+  /**
+   * addWorkflowEvent — atomic single updateDoc.
+   *
+   * Prepends `event` to workflow_events (newest first).
+   * If `newStatus` is supplied, also updates contract.status in the same write.
+   * Never reads from Firestore — uses the in-memory contracts array.
+   */
+  const addWorkflowEvent = async (
+    contractId: string,
+    event: WorkflowEvent,
+    newStatus?: string,
+  ) => {
+    const contract = contracts.find(c => c.id === contractId);
+    const existing = contract?.workflow_events ?? [];
+    const patch: Partial<Contract> = {
+      workflow_events: [event, ...existing],
+    };
+    if (newStatus !== undefined) patch.status = newStatus;
+    await updateDoc(doc(db, 'cms_contracts', contractId), patch as any);
+  };
+
+  // ── Client CRUD (proxied through shared_clients) ──────────────────────────
   const addClient = async (c: Omit<Client, 'id'>) => {
     await addSharedClient({
       name_ar:              c.name_ar,
@@ -88,6 +106,7 @@ export function useContracts() {
   const deleteClient = async (id: string) =>
     deleteSharedClient(id);
 
+  // ── Template CRUD ─────────────────────────────────────────────────────────
   const addTemplate = async (t: ContractTemplate) =>
     setDoc(doc(db, 'cms_templates', t.id), t);
 
@@ -97,6 +116,7 @@ export function useContracts() {
   const deleteTemplate = async (id: string) =>
     deleteDoc(doc(db, 'cms_templates', id));
 
+  // ── Project CRUD ──────────────────────────────────────────────────────────
   const addProject = async (p: Omit<Project, 'id'>) => {
     const id = crypto.randomUUID();
     await setDoc(doc(db, 'cms_projects', id), { ...p, id });
@@ -110,11 +130,12 @@ export function useContracts() {
 
   return {
     contracts,
-    clients: asCmsClients as unknown as Client[], // same shape, zero downstream changes
+    clients: asCmsClients as unknown as Client[],
     templates,
     projects,
     loading,
     addContract, updateContract, deleteContract,
+    addWorkflowEvent,
     addClient, updateClient, deleteClient,
     addTemplate, updateTemplate, deleteTemplate,
     addProject, updateProject, deleteProject,
