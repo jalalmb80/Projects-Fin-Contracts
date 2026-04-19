@@ -3,7 +3,6 @@ import { Contract, WorkflowEvent } from '../types';
 import {
   Plus, Search, FileText, Edit2, Trash2, AlertCircle,
   Filter, MoreVertical, Eye, FileDown, RefreshCw, X,
-  Printer, ChevronDown,
 } from 'lucide-react';
 import { useLang, t } from '../context/LanguageContext';
 import { useContracts } from '../hooks/useContracts';
@@ -20,6 +19,8 @@ interface Props {
 }
 
 // ─── KebabMenu ───────────────────────────────────────────────────────────────
+// The dropdown is rendered with position:fixed so it escapes overflow:hidden
+// containers (table card wrapper, overflow-x-auto scroll wrapper).
 interface KebabMenuProps {
   contract: Contract;
   onEdit: () => void;
@@ -35,15 +36,40 @@ function KebabMenu({
 }: KebabMenuProps) {
   const { lang } = useLang();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Position the fixed menu relative to the trigger button
+  const openMenu = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuStyle({
+        position: 'fixed',
+        top: rect.bottom + 4,
+        // align menu's right edge with button's right edge (RTL-friendly)
+        right: window.innerWidth - rect.right,
+        zIndex: 9999,
+      });
+    }
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false);
     };
+    const kh = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', kh);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', kh);
+    };
   }, [open]);
 
   const item = (icon: React.ReactNode, label: string, onClick: () => void, cls = '') => (
@@ -57,9 +83,10 @@ function KebabMenu({
   );
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
-        onClick={() => setOpen(v => !v)}
+        ref={btnRef}
+        onClick={openMenu}
         className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
         title={t('المزيد من الإجراءات', 'More actions', lang)}
       >
@@ -68,15 +95,13 @@ function KebabMenu({
 
       {open && (
         <div
-          className="absolute left-0 z-50 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden"
-          style={{ top: '100%' }}
+          ref={menuRef}
+          className="w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden"
+          style={menuStyle}
         >
           {item(<Edit2 size={15} className="text-emerald-600" />, t('تعديل العقد', 'Edit Contract', lang), onEdit)}
-
           <div className="border-t border-gray-100" />
-
           {item(<Eye size={15} className="text-blue-600" />, t('معاينة العقد', 'Preview Contract', lang), onPreview)}
-
           {item(
             isDownloading
               ? <span className="w-[15px] h-[15px] border-2 border-gray-300 border-t-emerald-600 rounded-full animate-spin inline-block" />
@@ -86,18 +111,13 @@ function KebabMenu({
               : t('تحميل PDF', 'Download PDF', lang),
             onDownload,
           )}
-
           <div className="border-t border-gray-100" />
-
-          {/* Change status — now opens WorkflowTransitionModal */}
           {item(
             <RefreshCw size={15} className="text-amber-600" />,
             t('تغيير الحالة', 'Change Status', lang),
             onChangeStatus,
           )}
-
           <div className="border-t border-gray-100" />
-
           {item(
             <Trash2 size={15} className="text-red-500" />,
             t('حذف العقد', 'Delete Contract', lang),
@@ -121,34 +141,48 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Preview modal
   const [previewContract, setPreviewContract] = useState<Contract | null>(null);
 
-  // Workflow transition modal (replaces old StatusPopover)
+  // Workflow transition modal
   const [pendingTransition, setPendingTransition] = useState<{
     contract: Contract;
     newStatus: string;
   } | null>(null);
-  // status-picker: we need to know which contract is having its status changed
-  // and show a lightweight status select *before* opening the transition modal.
-  const [statusPickerContract, setStatusPickerContract] = useState<Contract | null>(null);
+
+  // Status picker — also rendered fixed to escape overflow clipping
+  const [statusPicker, setStatusPicker] = useState<{
+    contract: Contract;
+    style: React.CSSProperties;
+  } | null>(null);
   const statusPickerRef = useRef<HTMLDivElement>(null);
 
-  // Close status picker on outside click
   useEffect(() => {
-    if (!statusPickerContract) return;
+    if (!statusPicker) return;
     const handler = (e: MouseEvent) => {
       if (statusPickerRef.current && !statusPickerRef.current.contains(e.target as Node))
-        setStatusPickerContract(null);
+        setStatusPicker(null);
     };
-    const kh = (e: KeyboardEvent) => { if (e.key === 'Escape') setStatusPickerContract(null); };
+    const kh = (e: KeyboardEvent) => { if (e.key === 'Escape') setStatusPicker(null); };
     document.addEventListener('mousedown', handler);
     document.addEventListener('keydown', kh);
     return () => {
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('keydown', kh);
     };
-  }, [statusPickerContract]);
+  }, [statusPicker]);
+
+  const openStatusPicker = (contract: Contract, triggerEl: HTMLElement) => {
+    const rect = triggerEl.getBoundingClientRect();
+    setStatusPicker({
+      contract,
+      style: {
+        position: 'fixed',
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+        zIndex: 9999,
+      },
+    });
+  };
 
   const filteredContracts = contracts.filter((c: Contract) => {
     const matchesSearch = c.title_ar.includes(searchTerm) || c.contract_number?.includes(searchTerm);
@@ -205,14 +239,12 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
     }
   };
 
-  // Step 1: user picks a new status from the inline picker
   const handleStatusPickerSelect = (contract: Contract, newStatus: string) => {
-    if (newStatus === contract.status) { setStatusPickerContract(null); return; }
-    setStatusPickerContract(null);
+    setStatusPicker(null);
+    if (newStatus === contract.status) return;
     setPendingTransition({ contract, newStatus });
   };
 
-  // Step 2: user fills WorkflowTransitionModal and confirms
   const handleTransitionConfirm = async (event: WorkflowEvent) => {
     if (!pendingTransition) return;
     await addWorkflowEvent(pendingTransition.contract.id, event, pendingTransition.newStatus);
@@ -223,7 +255,7 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
     ? contracts.find((c: Contract) => c.id === confirmDeleteId)
     : null;
 
-  const colorMap: Record<string, string> = {
+  const badgeColorMap: Record<string, string> = {
     gray: 'bg-gray-100 text-gray-700 ring-gray-300',
     yellow: 'bg-amber-100 text-amber-800 ring-amber-300',
     blue: 'bg-blue-100 text-blue-800 ring-blue-300',
@@ -267,10 +299,13 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
         </button>
       </div>
 
-      {/* ── Table card ── */}
-      <div className="bg-white shadow rounded-lg overflow-hidden">
+      {/* ── Table card ──
+           NOTE: overflow-hidden removed — it was clipping the fixed-positioned
+           KebabMenu dropdown and status picker when few rows were visible.
+           Border-radius is preserved via rounded-lg on the wrapper. */}
+      <div className="bg-white shadow rounded-lg">
         {/* Filters */}
-        <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row gap-4">
+        <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg flex flex-col md:flex-row gap-4">
           <div className="relative flex-1 max-w-md">
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-gray-400" />
@@ -306,6 +341,8 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
             <p className="mt-1 text-sm">{t('أنشئ عقدًا جديدًا للبدء', 'Create a new contract to get started', lang)}</p>
           </div>
         ) : (
+          // overflow-x-auto kept for horizontal scroll on narrow viewports,
+          // but dropdowns escape it via position:fixed.
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -337,7 +374,7 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.start_date || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex items-center justify-center gap-1 relative">
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => onEdit(c.id)}
                           className="p-1.5 rounded-md text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 transition-colors"
@@ -351,46 +388,23 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
                           onEdit={() => onEdit(c.id)}
                           onPreview={() => setPreviewContract(c)}
                           onDownload={() => handleDownload(c)}
-                          onChangeStatus={() => setStatusPickerContract(c)}
+                          onChangeStatus={() => {
+                            // We need the trigger element to position the picker;
+                            // KebabMenu already closed itself, so we open the picker
+                            // via a small timeout to let the DOM settle.
+                            setTimeout(() => {
+                              const btn = document.querySelector(
+                                `[data-status-btn="${c.id}"]`
+                              ) as HTMLElement | null;
+                              if (btn) openStatusPicker(c, btn);
+                            }, 0);
+                          }}
                           onDelete={() => setConfirmDeleteId(confirmDeleteId === c.id ? null : c.id)}
                           isDownloading={downloadingId === c.id}
                         />
 
-                        {/* Inline status picker — opens when kebab "Change Status" is clicked */}
-                        {statusPickerContract?.id === c.id && (
-                          <div
-                            ref={statusPickerRef}
-                            className="absolute left-0 top-full z-50 mt-1 w-52 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden"
-                          >
-                            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                {t('اختر الحالة الجديدة', 'Select new status', lang)}
-                              </span>
-                              <button onClick={() => setStatusPickerContract(null)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
-                            </div>
-                            <div className="py-1 max-h-64 overflow-y-auto">
-                              {contractStatuses.map((s) => {
-                                const isCurrent = s.label === c.status;
-                                const badgeCls = colorMap[s.color ?? 'gray'] ?? colorMap.gray;
-                                return (
-                                  <button
-                                    key={s.id}
-                                    disabled={isCurrent}
-                                    onClick={() => handleStatusPickerSelect(c, s.label)}
-                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-right transition-colors ${isCurrent ? 'bg-gray-50 cursor-default' : 'hover:bg-gray-50'}`}
-                                  >
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${badgeCls}`}>
-                                      {s.label}{s.is_win ? ' 🏆' : ''}
-                                    </span>
-                                    {isCurrent && (
-                                      <span className="mr-auto text-xs text-gray-400">{t('الحالية', 'current', lang)}</span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
+                        {/* Hidden anchor element used to position the status picker */}
+                        <span data-status-btn={c.id} className="sr-only" />
                       </div>
                     </td>
                   </tr>
@@ -400,6 +414,47 @@ export default function ContractsList({ contracts, clients, onEdit, onCreate }: 
           </div>
         )}
       </div>
+
+      {/* ── Status picker (fixed, escapes overflow clipping) ── */}
+      {statusPicker && (
+        <div
+          ref={statusPickerRef}
+          className="w-56 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden"
+          style={statusPicker.style}
+        >
+          <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              {t('اختر الحالة الجديدة', 'Select new status', lang)}
+            </span>
+            <button onClick={() => setStatusPicker(null)} className="text-gray-400 hover:text-gray-600">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="py-1 max-h-64 overflow-y-auto">
+            {contractStatuses.map((s) => {
+              const isCurrent = s.label === statusPicker.contract.status;
+              const badgeCls = badgeColorMap[s.color ?? 'gray'] ?? badgeColorMap.gray;
+              return (
+                <button
+                  key={s.id}
+                  disabled={isCurrent}
+                  onClick={() => handleStatusPickerSelect(statusPicker.contract, s.label)}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-right transition-colors ${
+                    isCurrent ? 'bg-gray-50 cursor-default' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${badgeCls}`}>
+                    {s.label}{s.is_win ? ' 🏆' : ''}
+                  </span>
+                  {isCurrent && (
+                    <span className="mr-auto text-xs text-gray-400">{t('الحالية', 'current', lang)}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Workflow transition modal ── */}
       {pendingTransition && (
