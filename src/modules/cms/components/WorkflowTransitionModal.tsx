@@ -46,10 +46,8 @@ export default function WorkflowTransitionModal({
   const isCustomRole = role === 'أخرى';
   const effectiveRole = isCustomRole ? customRole.trim() : role;
 
-  // Focus name field on open
   useEffect(() => { nameRef.current?.focus(); }, []);
 
-  // Close on Escape
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
     document.addEventListener('keydown', h);
@@ -64,7 +62,7 @@ export default function WorkflowTransitionModal({
     setSaving(true);
 
     const assignee: WorkflowAssignee = {
-      role: effectiveRole || workflowRoles[0] ?? '',
+      role: effectiveRole || (workflowRoles[0] ?? ''),
       name: name.trim(),
     };
 

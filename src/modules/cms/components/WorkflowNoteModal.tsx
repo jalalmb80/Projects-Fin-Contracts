@@ -57,7 +57,7 @@ export default function WorkflowNoteModal({ currentStatus, onConfirm, onCancel }
     setSaving(true);
 
     const assignee: WorkflowAssignee = {
-      role: effectiveRole || workflowRoles[0] ?? '',
+      role: effectiveRole || (workflowRoles[0] ?? ''),
       name: name.trim(),
     };
 
