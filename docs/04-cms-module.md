@@ -27,17 +27,23 @@ This hook is the equivalent of `AppContext` for the CMS. Every CMS page that nee
 | Collection | Firestore path | Order |
 |---|---|---|
 | contracts | `cms_contracts` | `start_date` desc |
-| clients | `cms_clients` | `name_ar` asc |
+| clients | `shared_clients` (via `useSharedClients`) | `name_ar` asc |
 | templates | `cms_templates` | `name_ar` asc |
 | projects | `cms_projects` | `name_ar` asc |
 
+### Key methods
+
+| Method | Purpose |
+|---|---|
+| `addContract` / `updateContract` / `deleteContract` | Standard contract CRUD |
+| `addWorkflowEvent(contractId, event, newStatus?)` | Atomic write: prepends event to `workflow_events[]`, optionally updates `status` in one `updateDoc` call |
+| `addClient` / `updateClient` / `deleteClient` | Proxied through `useSharedClients` |
+| `addTemplate` / `updateTemplate` / `deleteTemplate` | Template CRUD |
+| `addProject` / `updateProject` / `deleteProject` | Project CRUD |
+
 ### Auth guard
 
-The hook checks `user` from `usePlatform()` before opening any listeners. If `user` is null, it sets `loading: false` and returns empty arrays. This prevents Firestore permission errors during the auth loading phase.
-
-### Error handling
-
-Each `onSnapshot` call has an error handler that logs the error code and sets `loading: false`. If a listener fails silently, the page will show empty data rather than a perpetual spinner.
+The hook checks `user` from `usePlatform()` before opening any listeners. If `user` is null, it sets `loading: false` and returns empty arrays.
 
 ---
 
@@ -45,42 +51,40 @@ Each `onSnapshot` call has an error handler that logs the error code and sets `l
 
 **File:** `src/modules/cms/types.ts`
 
-All field names use Arabic naming conventions matching the original standalone contracts app. **Always check this file before writing form fields.**
+All field names use Arabic naming conventions. **Always check this file before writing form fields.**
 
-Key interfaces:
+### Workflow types (added 2026-04-19)
 
 ```typescript
-interface Client {
-  id: string;
-  name_ar: string;
-  entity_type: 'شركة' | 'جمعية' | 'جهة حكومية' | 'فرد';
-  license_authority: string;
-  license_no: string;
-  representative_name: string;
-  representative_title: string;
-  national_id: string;
-  address: string; city: string; postal_code: string;
-  phone: string; email: string;
+interface WorkflowAssignee {
+  role: string;   // from workflow_roles list, or free text if 'أخرى'
+  name: string;   // person's name, always free text
 }
 
-interface Project {
+interface WorkflowEvent {
   id: string;
-  name_ar: string;
-  project_type: ProjectType;  // Arabic string literal union
-  client_id: string;
-  amount_sar: number;
-  status: ProjectStatus;      // Arabic string literal union
-  description?: string;
-  start_date?: string;
+  type: 'transition' | 'note';
+  from_status: string | null;   // null reserved for future use
+  to_status: string;            // same as from_status when type === 'note'
+  assignee: WorkflowAssignee;
+  note: string;                 // required for 'note', optional for 'transition'
+  actor_name: string;           // Firebase user displayName ?? email prefix
+  actor_email: string;
+  created_at: string;           // ISO timestamp
 }
-
-type ProjectStatus = 'مخطط' | 'قيد التنفيذ' | 'مكتمل' | 'معلّق';
-
-type ProjectType = 'تطوير منصة' | 'تطوير تطبيق' | 'موقع إلكتروني'
-                 | 'اشتراك سنوي' | 'تهيئة وتشغيل' | 'استشارات' | 'أخرى';
 ```
 
-The `Contract` type is large (articles, appendices, payment schedule, versions). See the file for full definition.
+`Contract` has a new optional field:
+```typescript
+workflow_events?: WorkflowEvent[]; // absent on pre-workflow contracts — always read as ?? []
+```
+
+`AppSettings` has a new field:
+```typescript
+workflow_roles: string[]; // configurable list, persisted to cms_settings/config
+```
+
+Default roles: `مدير العقود | فريق القانوني | مدير المبيعات | فريق التنفيذ | الإدارة العليا | أخرى`
 
 ---
 
@@ -93,7 +97,7 @@ The `Contract` type is large (articles, appendices, payment schedule, versions).
 | `CMSClientsPage` | `/cms/clients` | Client CRUD |
 | `CMSProjectsPage` | `/cms/projects` | CMS project CRUD |
 | `TemplatesPage` | `/cms/templates` | Contract template CRUD |
-| `CMSSettingsPage` | `/cms/settings` | Company name, logo, signature |
+| `CMSSettingsPage` | `/cms/settings` | Statuses, types, **workflow roles** |
 
 ---
 
@@ -101,14 +105,54 @@ The `Contract` type is large (articles, appendices, payment schedule, versions).
 
 **File:** `src/modules/cms/components/ContractEditor.tsx`
 
-The contract editor is a large (~1,400 line) component with tabbed sections:
-- **Metadata** — contract number, type, status, client, project, dates
-- **Articles** — structured article editor (paragraph, list, page break blocks)
-- **Payment schedule** — task rows, installment table, totals, VAT
-- **Appendices** — free-form appendix editor
-- **Preview** — rendered contract preview with Hijri date support
+Tabbed sections:
+- **معلومات العقد** — contract number, type, **status (workflow-tracked)**, client, project, dates
+- **البنود** — structured article editor
+- **المدفوعات** — task rows, installment table, totals, VAT
+- **الملاحق** — appendix editor
+- **المرفقات** — attachment list
+- **الإصدارات** — version history
+- **سجل الإجراءات** — workflow timeline (new)
+- **معاينة العقد** — contract preview + PDF/Drive export
 
-When the contract status is changed to `'موقّع'` (Signed), the editor emits a `CONTRACT_SIGNED` event on `platformBus` with the contract's financial data. The Finance module's `BillingFormPage` listens for this event.
+### Status change flow
+
+Changing the status select in the Metadata tab calls `handleStatusChangeRequest()` instead of directly updating state. This opens `WorkflowTransitionModal`. On confirm, `addWorkflowEvent()` is called atomically (status + event in one write). Win-status side effects (Finance modal + platformBus event) fire after the workflow event is confirmed.
+
+### Versioning
+
+Versions are created on contract **content** save only. Status changes via workflow do **not** create version snapshots. The diff comparison excludes `workflow_events` from the change check.
+
+---
+
+## Workflow components
+
+| Component | File | Purpose |
+|---|---|---|
+| `WorkflowTransitionModal` | `components/WorkflowTransitionModal.tsx` | Status-change dialog: assignee (role+name) + optional note. Pure UI — no Firestore |
+| `WorkflowNoteModal` | `components/WorkflowNoteModal.tsx` | Note-only dialog: same assignee fields + required note. Pure UI |
+| `WorkflowTimeline` | `components/WorkflowTimeline.tsx` | Timeline tab: current-status banner, action buttons, event cards (newest first) |
+
+### WorkflowTransitionModal
+
+- Props: `contractId`, `fromStatus`, `toStatus`, `onConfirm(event: WorkflowEvent)`, `onCancel`
+- Validates: assignee name is required
+- Selecting role `أخرى` converts the dropdown to a free-text input
+- Renders via `createPortal` into `document.body`
+
+### WorkflowNoteModal
+
+- Props: `currentStatus`, `onConfirm(event: WorkflowEvent)`, `onCancel`
+- Note text is **required** (unlike transition where it is optional)
+- Produces a `WorkflowEvent` with `type: 'note'` and `from_status === to_status`
+
+### WorkflowTimeline
+
+- Shows current status banner with latest assignee
+- "إضافة ملاحظة" button opens `WorkflowNoteModal` via parent callback
+- "تغيير الحالة" button navigates to Metadata tab (status select is there)
+- Events displayed newest-first; transitions use 🔄 icon, notes use 📝 icon
+- Win-status transitions show emerald card; notes show blue card
 
 ---
 
@@ -116,29 +160,22 @@ When the contract status is changed to `'موقّع'` (Signed), the editor emits
 
 **File:** `src/modules/cms/utils/exportPdf.ts`
 
-Uses `html2pdf.js` to export the contract preview rendered in `ContractEditor`. The preview renders full Arabic RTL layout with company logo, Hijri date, articles, payment schedule table, and signature block.
+Uses `html2pdf.js`. The preview renders full Arabic RTL layout with company logo, Hijri date, articles, payment schedule table, and signature block.
 
 ---
 
 ## Feedback pattern
 
-CMS pages do not have access to `ToastProvider` (it is scoped to the Finance module). They use an inline feedback state instead:
+CMS pages do not have access to `ToastProvider`. They use an inline feedback state:
 
 ```typescript
 const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-
-const showFeedback = (type, msg) => {
-  setFeedback({ type, msg });
-  setTimeout(() => setFeedback(null), 4000);
-};
 ```
 
-This renders a dismissing banner below the page heading. Do not add `alert()` calls.
+Do not add `alert()` calls.
 
 ---
 
 ## CMS vs Finance data separation
 
-The CMS module has its own separate Firestore collections (`cms_clients`, `cms_projects`, `cms_contracts`, `cms_templates`, `cms_settings`). These are entirely separate from the Finance collections (`counterparties`, `projects`, etc.).
-
-A CMS client is not the same as a Finance counterparty. A CMS project is not the same as a Finance project. They happen to represent similar real-world concepts but they have different data structures and lifecycles.
+The CMS module has its own Firestore collections (`cms_contracts`, `cms_templates`, `cms_projects`, `cms_settings`). Clients are now shared via `shared_clients` (accessible from both Finance and CMS). A CMS project is still separate from a Finance project.

@@ -33,29 +33,23 @@ Established the modular platform shell:
 - Updated CMS pages (`CMSClientsPage`, `CMSProjectsPage`, `ContractsPage`) to use the hook
 - Added `.env.example` with all required Firebase and Google Cloud variables
 
-**Context:** The CMS module originally ran entirely on mock data (`mockData.ts`). This commit replaced all mock data references with live Firestore reads and writes. The `useContracts` hook was modeled after AppContext's onSnapshot pattern.
-
 ---
 
 ### `0ec13f8` — Integrate platform context and improve UI feedback *(2026-04-07)*
 
-- Added auth guard to `useContracts` — listeners only open when `user` is non-null
-- Removed dead `notification` state from `AppContext` (it was writing to state but never rendering)
-- Added `ToastProvider` to Finance routes (was missing — caused crash on Subscriptions, Products, ProjectDetail)
-- Fixed `CMSDashboardPage` sort — was using `c.created_at` which doesn't exist on `Contract` type; changed to `c.start_date`
-
-**Context:** This commit fixed the first set of runtime crashes reported after the initial integration. The ToastProvider gap was the most critical — the app would crash immediately on three Finance pages.
+- Added auth guard to `useContracts`
+- Removed dead `notification` state from `AppContext`
+- Added `ToastProvider` to Finance routes
+- Fixed `CMSDashboardPage` sort
 
 ---
 
 ### `16cb78a` — feat(finance): Improve app context and routing *(2026-04-08)*
 
-- Fixed provider order: moved `ToastProvider` to wrap `AppProvider` (it was previously nested inside — `AppContext` calls `useToast()` so it must be the child, not the parent)
-- Replaced all 57 `console.log('[AppContext]', ...)` calls with real `addToast()` calls — users now see success/error feedback for all CRUD operations
-- Fixed `CMSDashboardPage` to use `useContracts().clients` instead of `usePlatform().counterparties` (which no longer existed after PlatformContext cleanup)
-- Deleted `temp_billing.tsx` from repo root
-
-**Context:** The provider order bug was subtle — AppContext was trying to call useToast() but it was outside ToastProvider, causing a crash. Moving ToastProvider one level up fixed it. The console.log cleanup restored user-visible feedback that was lost when the notification system was removed.
+- Fixed provider order: moved `ToastProvider` to wrap `AppProvider`
+- Replaced all 57 `console.log` calls in AppContext with real `addToast()` calls
+- Fixed `CMSDashboardPage` to use `useContracts().clients`
+- Deleted `temp_billing.tsx`
 
 ---
 
@@ -63,42 +57,98 @@ Established the modular platform shell:
 
 - Added `cms_projects` collection to `useContracts` hook
 - Added Firestore rules for `cms_projects`
-- Fixed `useContracts` snapshot mapping — changed `d.data()` to `{ id: d.id, ...d.data() }` across all 4 listeners (same fix as AppContext's pattern)
-- Refactored `CounterpartiesPage`, `InvoiceForm`, `ProjectForm`, `SubscriptionForm` to use `useApp()` instead of the now-deleted `counterpartyService` and `projectService` service files
-- Deleted all 5 unused service files, `ProtectedRoute.tsx`, and `temp_cms/types.ts`
-
-**Context:** The service files were an artifact of the original FinArchiTec app's architecture. After AppContext was wired with real-time listeners, the services were redundant and caused stale data issues — edits in CounterpartiesPage didn't update the Finance forms until page reload. Removing them and using AppContext directly fixed the consistency problem.
+- Fixed `useContracts` snapshot mapping
+- Refactored Finance pages to use `useApp()` instead of service files
+- Deleted all 5 unused service files
 
 ---
 
 ### `0fcc5b4` — Add error handling to cms hooks and currency toggle *(2026-04-08)*
 
-- Added error callbacks to all 4 `onSnapshot` calls in `useContracts` — silent failures now log error code and set `loading: false`
-- Wired the currency toggle button in Finance `Layout.tsx` to `setDisplayCurrency()` from AppContext
-- Wired the dark mode toggle button to `document.documentElement.classList.toggle('dark')`
-- Deleted `src/modules/finance/hooks/useToast.ts` (dead code)
+- Added error callbacks to all `onSnapshot` calls
+- Wired currency toggle and dark mode toggle
 
 ---
 
 ### `3b95af8` — Add legal entity selection to subscription form *(2026-04-08)*
 
-- `SubscriptionForm` now populates a Legal Entity dropdown from `useApp().legalEntities` instead of hardcoding `legalEntityId: 'default'`
-- Fixed AppContext `getDocs` for products, legalEntities, budgetCategories to use `{ id: d.id, ...d.data() }` instead of `d.data()` — consistent with onSnapshot pattern
-- Added Firestore rule for `cms_settings` collection
-- Deleted `src/modules/finance/hooks/useToast.ts`
-
-**Context:** Every subscription created before this fix had `legalEntityId: 'default'` — a non-existent entity ID. This fix also covered the id-spread bug: any document created outside the app (Firebase Console, migrations) wouldn't have its `id` correctly hydrated without the spread.
+- `SubscriptionForm` populates Legal Entity dropdown from `useApp().legalEntities`
+- Fixed AppContext `getDocs` id-spread bug
+- Added Firestore rule for `cms_settings`
 
 ---
 
-### `f758276` — fix: correct CMS data types, align Client form, replace alert() with inline feedback and toast *(2026-04-08)*
+### `f758276` — fix: correct CMS data types, align Client form, replace alert() *(2026-04-08)*
 
-- **CMSProjectsPage** — project `status` values corrected from English strings (`'Active'`, `'Completed'`, `'On Hold'`) to the correct Arabic `ProjectStatus` type values (`'مخطط'`, `'قيد التنفيذ'`, `'مكتمل'`, `'معلّق'`). All saved projects previously had structurally invalid status values.
-- **CMSClientsPage** — complete form overhaul. Previous form saved English-named fields (`name`, `nameAr`, `contactPerson`, `taxId`) but the `Client` type expects Arabic-named fields (`name_ar`, `entity_type`, `representative_name`, etc.). Form now matches the type exactly with all required fields.
-- **CMSSettingsPage** — replaced both `alert()` calls with inline feedback state pattern.
-- **BillingDetailPage** — replaced `alert('Invalid payment amount')` with `addToast('error', ...)` — consistent with the rest of Finance.
+- `CMSProjectsPage` status values corrected to Arabic `ProjectStatus` type
+- `CMSClientsPage` form fields aligned to `Client` type
+- `CMSSettingsPage` and `BillingDetailPage` replaced `alert()` with inline feedback
 
-**Context:** This was a data integrity fix. Any CMS clients or projects saved before this commit were stored with the wrong field names and invalid enum values. New records created after this commit are structurally correct.
+---
+
+### `ce4faf0` — feat(cms/workflow): Phase 1+2 — types, settings context, useContracts hook *(2026-04-19)*
+
+**Files changed:** `types.ts`, `context/SettingsContext.tsx`, `hooks/useContracts.ts`
+
+- Added `WorkflowAssignee` and `WorkflowEvent` interfaces to `types.ts`
+- Added `workflow_events?: WorkflowEvent[]` to `Contract`
+- Added `workflow_roles: string[]` to `AppSettings` with `DEFAULT_WORKFLOW_ROLES`
+- `SettingsContext` loads `workflow_roles` from Firestore `cms_settings/config`; exposes `workflowRoles` and `updateWorkflowRoles()`
+- `useContracts` gains `addWorkflowEvent(contractId, event, newStatus?)` — single atomic `updateDoc` that prepends the event and optionally updates status
+
+**Design decision:** `workflow_events` is embedded as an array inside `cms_contracts` documents (not a subcollection) — consistent with the existing `versions[]` pattern, safe for single-tenant usage.
+
+---
+
+### `d8dbb84` — feat(cms/workflow): Phase 3 — WorkflowTransitionModal + WorkflowNoteModal *(2026-04-19)*
+
+**Files created:** `components/WorkflowTransitionModal.tsx`, `components/WorkflowNoteModal.tsx`
+
+- `WorkflowTransitionModal`: dialog for status-change events. Collects role (from configurable list, or free text when 'أخرى' selected) + assignee name (required) + optional note. Renders via `createPortal`. Pure UI — caller handles persistence.
+- `WorkflowNoteModal`: simplified dialog for note-only events. Same assignee fields; note is required. Produces `type: 'note'` event with `from_status === to_status`.
+
+---
+
+### `8c4df02` — feat(cms/workflow): Phase 4 — WorkflowTimeline component *(2026-04-19)*
+
+**File created:** `components/WorkflowTimeline.tsx`
+
+- Current-status banner showing latest assignee
+- "إضافة ملاحظة" and "تغيير الحالة" action buttons
+- `EventCard` list (newest-first): expandable cards; transitions in amber/emerald, notes in blue
+- Empty state with explanatory message
+
+---
+
+### `5da761f` — feat(cms/workflow): Phase 5 — wire ContractEditor *(2026-04-19)*
+
+**File modified:** `components/ContractEditor.tsx`
+
+- Added `GitBranch`-icon **سجل الإجراءات** tab with event-count badge
+- Metadata tab status select now calls `handleStatusChangeRequest()` instead of directly mutating state; the select has an amber border to signal it is workflow-tracked
+- `handleStatusChangeRequest` → sets `pendingStatus` → opens `WorkflowTransitionModal`
+- `handleTransitionConfirm` → calls `addWorkflowEvent()` → updates local state → fires win-status side effects (Finance modal + platformBus)
+- `handleNoteConfirm` → calls `addWorkflowEvent()` without status change
+- Version diff comparison excludes `workflow_events` from the change check
+- New contracts initialize with `workflow_events: []`
+
+---
+
+### `ce7c181` — feat(cms/workflow): Phase 6+7 — ContractsList + CMSSettingsPage *(2026-04-19)*
+
+**Files modified:** `components/ContractsList.tsx`, `pages/CMSSettingsPage.tsx`
+
+**ContractsList (Phase 6):**
+- Kebab menu "تغيير الحالة" no longer calls `updateContract` directly
+- Flow: kebab click → inline status picker popover → user picks new status → `WorkflowTransitionModal` → `addWorkflowEvent()`
+- Old `StatusPopover` component removed; replaced by simpler inline picker that appears next to the row's actions cell
+- `getStatusColor()` now derives colors from `contractStatuses` config instead of hardcoded Arabic strings
+
+**CMSSettingsPage (Phase 7):**
+- Added "أدوار سير العمل" section (same pattern as contract_statuses and contract_types)
+- Roles list with inline edit/delete per row; "إضافة دور" input; persists via `updateWorkflowRoles()`
+- `SectionHeader` component updated to accept `'roles'` as a `which` value
+- `GitBranch` icon in section header for visual distinction
 
 ---
 
@@ -112,5 +162,3 @@ This project was built by merging two standalone apps:
 | `jalalmb80/contracts-main` | `src/modules/cms/` | In-memory mock data, Arabic-only, no Firebase |
 
 The merge introduced: shared AppShell, PlatformContext, platformBus, lazy module loading, and Firebase connectivity for the CMS module.
-
-A previous merged version (`jalalmb80/Projects-Management-main`) was reviewed and superseded by this repo (`jalalmb80/Projects-Fin-Contracts`) which contains all fixes applied.

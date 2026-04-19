@@ -1,7 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
-import { AppSettings, PartyOneEntity, ContractStatusConfig, DEFAULT_CONTRACT_STATUSES, DEFAULT_CONTRACT_TYPES } from '../types';
+import {
+  AppSettings,
+  PartyOneEntity,
+  ContractStatusConfig,
+  DEFAULT_CONTRACT_STATUSES,
+  DEFAULT_CONTRACT_TYPES,
+  DEFAULT_WORKFLOW_ROLES,
+} from '../types';
 import { usePlatform } from '../../../core/context/PlatformContext';
 import { useGlobalSettings } from '../../../core/context/GlobalSettingsContext';
 
@@ -32,6 +39,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   default_vat_rate: 15,
   contract_statuses: DEFAULT_CONTRACT_STATUSES,
   contract_types: DEFAULT_CONTRACT_TYPES,
+  workflow_roles: DEFAULT_WORKFLOW_ROLES,
 };
 
 interface SettingsContextType {
@@ -43,10 +51,13 @@ interface SettingsContextType {
   // Contract config helpers
   contractStatuses: ContractStatusConfig[];
   contractTypes: string[];
-  winStatuses: string[];   // labels where is_win === true
-  loseStatuses: string[];  // labels where is_lose === true
+  winStatuses: string[];
+  loseStatuses: string[];
   updateContractStatuses: (statuses: ContractStatusConfig[]) => Promise<void>;
   updateContractTypes: (types: string[]) => Promise<void>;
+  // Workflow
+  workflowRoles: string[];
+  updateWorkflowRoles: (roles: string[]) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType>({
@@ -61,6 +72,8 @@ const SettingsContext = createContext<SettingsContextType>({
   loseStatuses: DEFAULT_CONTRACT_STATUSES.filter(s => s.is_lose).map(s => s.label),
   updateContractStatuses: async () => {},
   updateContractTypes: async () => {},
+  workflowRoles: DEFAULT_WORKFLOW_ROLES,
+  updateWorkflowRoles: async () => {},
 });
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
@@ -69,6 +82,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [vatRate, setVatRate] = useState(15);
   const [contractStatuses, setContractStatuses] = useState<ContractStatusConfig[]>(DEFAULT_CONTRACT_STATUSES);
   const [contractTypes, setContractTypes] = useState<string[]>(DEFAULT_CONTRACT_TYPES);
+  const [workflowRoles, setWorkflowRoles] = useState<string[]>(DEFAULT_WORKFLOW_ROLES);
   const [cmsLoading, setCmsLoading] = useState(true);
 
   useEffect(() => {
@@ -79,8 +93,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (snap.exists()) {
           const data = snap.data();
           setVatRate(data.default_vat_rate ?? 15);
+
           if (Array.isArray(data.contract_statuses) && data.contract_statuses.length > 0) {
-            // Back-compat: old records may not have is_lose, default to false
             setContractStatuses(
               data.contract_statuses.map((s: ContractStatusConfig) => ({
                 ...s,
@@ -88,8 +102,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
               }))
             );
           }
+
           if (Array.isArray(data.contract_types) && data.contract_types.length > 0)
             setContractTypes(data.contract_types);
+
+          if (Array.isArray(data.workflow_roles) && data.workflow_roles.length > 0)
+            setWorkflowRoles(data.workflow_roles);
         } else {
           const legacySnap = await getDoc(doc(db, 'cms_settings', 'entities'));
           if (legacySnap.exists()) setVatRate(legacySnap.data().default_vat_rate ?? 15);
@@ -110,6 +128,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     default_vat_rate: vatRate,
     contract_statuses: contractStatuses,
     contract_types: contractTypes,
+    workflow_roles: workflowRoles,
   };
 
   const setSettings = async (s: AppSettings) => {
@@ -125,6 +144,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const updateContractTypes = async (types: string[]) => {
     setContractTypes(types);
     await persistConfig({ contract_types: types });
+  };
+
+  const updateWorkflowRoles = async (roles: string[]) => {
+    setWorkflowRoles(roles);
+    await persistConfig({ workflow_roles: roles });
   };
 
   const winStatuses  = contractStatuses.filter(s => s.is_win).map(s => s.label);
@@ -149,6 +173,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       loseStatuses,
       updateContractStatuses,
       updateContractTypes,
+      workflowRoles,
+      updateWorkflowRoles,
     }}>
       {children}
     </SettingsContext.Provider>

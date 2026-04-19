@@ -21,25 +21,22 @@ export interface PartyOneEntity {
 }
 
 // ── Contract status config ────────────────────────────────────────────────────
-// is_win and is_lose are mutually exclusive — a status cannot be both.
-// Neutral statuses have both flags false (draft, under review, expired, etc.).
 export interface ContractStatusConfig {
-  id: string;        // stable slug, e.g. "signed"
-  label: string;     // display text in Arabic, e.g. "موقّع"
-  is_win: boolean;   // counts as a won contract in KPIs
-  is_lose: boolean;  // counts as a lost contract in KPIs
-  color?: string;    // optional tailwind color key for badges
+  id: string;
+  label: string;
+  is_win: boolean;
+  is_lose: boolean;
+  color?: string;
 }
 
 export interface AppSettings {
   entities: PartyOneEntity[];
   default_vat_rate: number;
-  // Dynamic lists — managed from Contract Settings page
   contract_statuses: ContractStatusConfig[];
   contract_types: string[];
+  workflow_roles: string[];
 }
 
-// Runtime types — kept as string so dynamic values from settings work everywhere
 export type ContractStatus = string;
 export type ContractType   = string;
 
@@ -153,6 +150,36 @@ export interface ContractVersion {
   snapshot: Omit<Contract, 'versions'>;
 }
 
+// ── Workflow ──────────────────────────────────────────────────────────────────
+
+/**
+ * The person/team responsible for the next action after this event.
+ * role  = selected from the configurable workflow_roles list (or free-typed if 'أخرى')
+ * name  = always free text — the actual individual's name
+ */
+export interface WorkflowAssignee {
+  role: string;
+  name: string;
+}
+
+/**
+ * A single entry in the contract's audit trail.
+ *
+ * type === 'transition'  → status changed from from_status to to_status
+ * type === 'note'        → from_status === to_status (status unchanged, note added)
+ */
+export interface WorkflowEvent {
+  id: string;
+  type: 'transition' | 'note';
+  from_status: string | null;   // null reserved for future first-event use
+  to_status: string;
+  assignee: WorkflowAssignee;
+  note: string;                 // required for 'note' type; optional for 'transition'
+  actor_name: string;           // Firebase user displayName ?? email prefix
+  actor_email: string;
+  created_at: string;           // ISO timestamp
+}
+
 export type ProjectType =
   | 'تطوير منصة'
   | 'تطوير تطبيق'
@@ -198,6 +225,8 @@ export interface Contract {
   attachments: Attachment[];
   versions: ContractVersion[];
   tags: string[];
+  /** Workflow audit trail. Absent on pre-workflow contracts — always read as ?? [] */
+  workflow_events?: WorkflowEvent[];
 }
 
 export type ContractTemplateCategory =
@@ -222,17 +251,17 @@ export interface ContractTemplate {
   is_default?: boolean;
 }
 
-// ── Default lists (used when no custom config exists in Firestore) ─────────────
+// ── Default lists ─────────────────────────────────────────────────────────────
 export const DEFAULT_CONTRACT_STATUSES: ContractStatusConfig[] = [
-  { id: 'draft',     label: 'مسودة',       is_win: false, is_lose: false, color: 'gray' },
-  { id: 'review',    label: 'قيد المراجعة', is_win: false, is_lose: false, color: 'yellow' },
-  { id: 'approved',  label: 'معتمد',      is_win: false, is_lose: false, color: 'blue' },
-  { id: 'signed',    label: 'موقّع',      is_win: true,  is_lose: false, color: 'emerald' },
-  { id: 'active',    label: 'نشط',        is_win: true,  is_lose: false, color: 'green' },
-  { id: 'completed', label: 'مكتمل',      is_win: true,  is_lose: false, color: 'teal' },
-  { id: 'expired',   label: 'منتهي',      is_win: false, is_lose: false, color: 'orange' },
-  { id: 'cancelled', label: 'ملغى',      is_win: false, is_lose: true,  color: 'red' },
-  { id: 'lost',      label: 'خسارة',      is_win: false, is_lose: true,  color: 'red' },
+  { id: 'draft',     label: 'مسودة',        is_win: false, is_lose: false, color: 'gray'    },
+  { id: 'review',    label: 'قيد المراجعة', is_win: false, is_lose: false, color: 'yellow'  },
+  { id: 'approved',  label: 'معتمد',        is_win: false, is_lose: false, color: 'blue'    },
+  { id: 'signed',    label: 'موقّع',        is_win: true,  is_lose: false, color: 'emerald' },
+  { id: 'active',    label: 'نشط',          is_win: true,  is_lose: false, color: 'green'   },
+  { id: 'completed', label: 'مكتمل',        is_win: true,  is_lose: false, color: 'teal'    },
+  { id: 'expired',   label: 'منتهي',        is_win: false, is_lose: false, color: 'orange'  },
+  { id: 'cancelled', label: 'ملغى',         is_win: false, is_lose: true,  color: 'red'     },
+  { id: 'lost',      label: 'خسارة',        is_win: false, is_lose: true,  color: 'red'     },
 ];
 
 export const DEFAULT_CONTRACT_TYPES: string[] = [
@@ -240,4 +269,13 @@ export const DEFAULT_CONTRACT_TYPES: string[] = [
   'اشتراك/SaaS',
   'إنتاج محتوى',
   'مختلط',
+];
+
+export const DEFAULT_WORKFLOW_ROLES: string[] = [
+  'مدير العقود',
+  'فريق القانوني',
+  'مدير المبيعات',
+  'فريق التنفيذ',
+  'الإدارة العليا',
+  'أخرى',
 ];
