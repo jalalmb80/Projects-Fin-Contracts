@@ -363,6 +363,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (!project) throw new Error('Project not found');
       const milestone = project.milestones.find(m => m.id === milestoneId);
       if (!milestone) throw new Error('Milestone not found');
+
+      // Guard: if milestone is already Invoiced, do not create a second invoice.
+      // Protects against double-click / rapid re-entry before the snapshot updates
+      // the local state. The server-side rules cannot enforce this by themselves
+      // because the milestone lives as an array element on the project document.
+      if (milestone.status === MilestoneStatus.Invoiced) {
+        addToast('success', 'Milestone already invoiced');
+        return;
+      }
+
       const batch = writeBatch(db);
       const invoiceId = generateId();
       batch.update(doc(db, 'projects', projectId), {
@@ -455,29 +465,45 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) { addToast('error', 'Failed to record payment'); }
   };
 
+  // Wrapped in runTransaction so both the payment doc and the invoice doc are
+  // re-read at commit time and updated atomically. The previous writeBatch
+  // version read from React state before queuing writes, which created a
+  // TOCTOU window: two allocations in flight could each see the same
+  // unallocatedAmount/balance and both succeed, producing over-allocation.
   const allocatePayment = async (paymentId: string, invoiceId: string, amount: number) => {
     try {
-      const payment = state.payments.find(p => p.id === paymentId);
-      const invoice = state.billingDocuments.find(d => d.id === invoiceId);
-      if (!payment) throw new Error('Payment not found');
-      if (!invoice) throw new Error('Invoice not found');
-      if (payment.unallocatedAmount < amount) throw new Error('Insufficient unallocated amount');
-      if (invoice.balance < amount) throw new Error('Allocation amount exceeds invoice balance');
-      const batch = writeBatch(db);
-      const newAllocation = { id: generateId(), paymentId, invoiceId, amount, date: now() };
-      batch.update(doc(db, 'payments', paymentId), {
-        allocations: [...(payment.allocations || []), newAllocation],
-        unallocatedAmount: payment.unallocatedAmount - amount
+      await runTransaction(db, async (transaction) => {
+        const paymentRef = doc(db, 'payments', paymentId);
+        const invoiceRef = doc(db, 'billingDocuments', invoiceId);
+        const paymentSnap = await transaction.get(paymentRef);
+        const invoiceSnap = await transaction.get(invoiceRef);
+        if (!paymentSnap.exists()) throw new Error('Payment not found');
+        if (!invoiceSnap.exists()) throw new Error('Invoice not found');
+        const payment = paymentSnap.data() as Payment;
+        const invoice = invoiceSnap.data() as BillingDocument;
+
+        const unallocated = payment.unallocatedAmount ?? 0;
+        if (unallocated < amount) throw new Error('Insufficient unallocated amount');
+        if (invoice.balance < amount) throw new Error('Allocation amount exceeds invoice balance');
+
+        const newAllocation = { id: generateId(), paymentId, invoiceId, amount, date: now() };
+        transaction.update(paymentRef, {
+          allocations: [...(payment.allocations || []), newAllocation],
+          unallocatedAmount: unallocated - amount,
+        });
+
+        const newPaidAmount = (invoice.paidAmount ?? 0) + amount;
+        const newBalance = invoice.total - newPaidAmount;
+        let newStatus = invoice.status;
+        if (newBalance <= 0) newStatus = DocumentStatus.Paid;
+        else if (newPaidAmount > 0) newStatus = DocumentStatus.PartiallyPaid;
+        transaction.update(invoiceRef, {
+          paidAmount: newPaidAmount,
+          balance: newBalance,
+          status: newStatus,
+          updatedAt: now(),
+        });
       });
-      const newPaidAmount = invoice.paidAmount + amount;
-      const newBalance = invoice.total - newPaidAmount;
-      let newStatus = invoice.status;
-      if (newBalance <= 0) newStatus = DocumentStatus.Paid;
-      else if (newPaidAmount > 0) newStatus = DocumentStatus.PartiallyPaid;
-      batch.update(doc(db, 'billingDocuments', invoiceId), {
-        paidAmount: newPaidAmount, balance: newBalance, status: newStatus, updatedAt: now()
-      });
-      await batch.commit();
       addToast('success', 'Payment allocated');
     } catch (error) { console.error(error); addToast('error', 'Failed to allocate payment'); }
   };
