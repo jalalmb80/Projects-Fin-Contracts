@@ -230,7 +230,7 @@ export default function OffersListPage() {
                   onChange={e => setTitleAr(e.target.value)}
                   dir="rtl"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                  placeholder="\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0639\u0631\u0636"
+                  placeholder="عنوان العرض"
                 />
               </div>
             </div>
@@ -274,7 +274,7 @@ export default function OffersListPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
                 >
                   <option value="en">English</option>
-                  <option value="ar">\u0639\u0631\u0628\u064a</option>
+                  <option value="ar">عربي</option>
                 </select>
               </div>
               <div>
