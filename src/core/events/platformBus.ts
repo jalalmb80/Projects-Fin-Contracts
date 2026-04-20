@@ -13,6 +13,7 @@ export const platformBus = {
 };
 
 export const PLATFORM_EVENTS = {
-  CONTRACT_SIGNED: 'contract:signed',
+  CONTRACT_SIGNED:              'contract:signed',
   CREATE_BILLING_FROM_CONTRACT: 'billing:createFromContract',
+  OFFER_WON:                    'offer:won',   // payload: { offerId, offerNumber, clientName, totalValue }
 };
