@@ -9,13 +9,10 @@ service cloud.firestore {
 
     // ── Platform-wide shared ────────────────────────────────────────────────
 
-    // Unified customer/vendor directory — Finance, CMS, and all future modules.
-    // Replaces: counterparties (CUSTOMER/BOTH) + cms_clients
     match /shared_clients/{document=**} {
       allow read, write: if isAuthenticated();
     }
 
-    // Platform settings (entities, branding, language)
     match /platform_settings/{document=**} {
       allow read, write: if isAuthenticated();
     }
@@ -34,13 +31,9 @@ service cloud.firestore {
     match /subscriptions/{document=**} {
       allow read, write: if isAuthenticated();
     }
-
-    // Legacy VENDOR-only counterparties — kept until a vendor module is built.
-    // CUSTOMER/BOTH records have been migrated to shared_clients.
     match /counterparties/{document=**} {
       allow read, write: if isAuthenticated();
     }
-
     match /products/{document=**} {
       allow read, write: if isAuthenticated();
     }
@@ -62,13 +55,9 @@ service cloud.firestore {
     match /cms_contracts/{document=**} {
       allow read, write: if isAuthenticated();
     }
-
-    // Kept during migration window only.
-    // Remove after all records are confirmed in shared_clients.
     match /cms_clients/{document=**} {
       allow read, write: if isAuthenticated();
     }
-
     match /cms_templates/{document=**} {
       allow read, write: if isAuthenticated();
     }
@@ -77,6 +66,24 @@ service cloud.firestore {
     }
     match /cms_settings/{document=**} {
       allow read, write: if isAuthenticated();
+    }
+
+    // ── Offers ──────────────────────────────────────────────────────────────
+    // Offer documents embed sections, line_items, notes, and workflow_log
+    // as arrays — no subcollections in Phase 1.
+
+    match /offers/{offerId} {
+      allow read:   if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false; // soft-delete via status='archived' only
+    }
+
+    match /offer_templates/{templateId} {
+      allow read:   if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false; // archive only
     }
 
     // ── Default deny ────────────────────────────────────────────────────────
