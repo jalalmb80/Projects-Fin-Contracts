@@ -4,21 +4,15 @@
 
 `src/modules/offers/`
 
-## Entry point
-
-`src/modules/offers/routes.tsx`
-
 ---
 
 ## Purpose
 
-The Offers module generates, manages, and tracks commercial proposals sent to clients. It supports bilingual content (EN / AR), structured sections, line-item pricing, a workflow state machine with an immutable audit trail, internal notes, and PDF export. Offers are the pre-sales counterpart to CMS Contracts — when an offer is won a `platformBus` event fires so the CMS module can create the corresponding contract.
+The Offers module generates, manages, and tracks commercial proposals. Supports bilingual content (EN/AR), structured sections, line-item pricing, a workflow state machine with immutable audit trail, internal notes, version history, and PDF export. When an offer is won, a `platformBus` event triggers CMS contract creation.
 
 ---
 
 ## Provider architecture
-
-Two providers wrap `OffersLayout`. Both mount once; all child pages consume via hooks.
 
 ```
 OffersProvider            (onSnapshot: offers + offer_templates)
@@ -35,39 +29,28 @@ OffersProvider            (onSnapshot: offers + offer_templates)
 
 | Method | Purpose |
 |---|---|
-| `createOffer(offer, initialWorkflowEntry)` | Batch: offer doc + first workflow_log entry, atomic |
+| `createOffer(offer, initialEntry)` | Batch: offer doc + first workflow_log entry |
 | `updateOffer(id, data)` | Partial offer update |
-| `addWorkflowLogEntry(offerId, entry, newStatus?, systemNote?)` | Batch: log entry + status + optional note — atomic |
-| `addNote(offerId, note)` | Write to `offers/{id}/notes` |
+| `addWorkflowLogEntry(offerId, entry, newStatus?, systemNote?, versionSnapshot?)` | Batch: log + status + note + version, all atomic |
+| `addNote(offerId, note)` | Write to `offers/{id}/notes` subcollection |
 | `updateSections / updateLineItems` | Embedded array mutations |
 | Template CRUD | `createTemplate`, `updateTemplate`, `archiveTemplate` |
 
-### useOffersSettings — key values
-
-| Value | Description |
-|---|---|
-| `offerWorkflowRoles: string[]` | From `offer_settings/general`; defaults to `DEFAULT_OFFER_WORKFLOW_ROLES` |
-| `updateOfferWorkflowRoles(roles)` | Persists to Firestore + updates local state |
-
 ---
 
-## useOfferDetail hook
+## Per-offer hooks (OfferBuilderPage only)
 
-**File:** `src/modules/offers/hooks/useOfferDetail.ts`
-
-Used exclusively in `OfferBuilderPage`. Subscribes to per-offer subcollections.
-
-| Subcollection | Path | Order |
+| Hook | Data | Firestore path |
 |---|---|---|
-| workflow_log | `offers/{id}/workflow_log` | `created_at` desc |
-| notes | `offers/{id}/notes` | `created_at` desc |
+| `useOfferDetail(id)` | `workflowLog[]`, `notes[]` | `offers/{id}/workflow_log`, `offers/{id}/notes` |
+| `useOfferVersions(id)` | `versions[]` | `offers/{id}/versions` |
 
 ---
 
 ## Offer numbering
 
-`generateOfferNumber()` is async — uses `runTransaction` on `appSettings/offerCounter`.  
-Format: `OFF-{year}-{seq padded 4}` — e.g. `OFF-2026-0001`
+`generateOfferNumber()` is async — `runTransaction` on `appSettings/offerCounter`.  
+Format: `OFF-{year}-{seq 4-padded}` — e.g. `OFF-2026-0001`
 
 ---
 
@@ -77,6 +60,29 @@ Format: `OFF-{year}-{seq padded 4}` — e.g. `OFF-2026-0001`
 |---|---|---|
 | workflow_log | `offers/{offerId}/workflow_log/{entryId}` | create only (immutable) |
 | notes | `offers/{offerId}/notes/{noteId}` | create + update (pin); no delete |
+| versions | `offers/{offerId}/versions/{versionId}` | create only (immutable) |
+
+---
+
+## Version history (Phase 3)
+
+`OfferVersion` is written automatically on each status transition inside `addWorkflowLogEntry`’s `writeBatch` — the same atomic write that updates status, adds the log entry, and writes the system note.
+
+```typescript
+interface OfferVersion {
+  id:             string;
+  version_number: number;   // workflowLog.length + 1 at transition time
+  created_at:     string;
+  change_summary: string;   // e.g. "Status: Draft → Under Review"
+  snapshot:       OfferVersionSnapshot;  // full offer minus subcollection fields
+}
+
+type OfferVersionSnapshot = Omit<Offer, 'notes' | 'workflow_log'>;
+```
+
+The snapshot captures the pre-transition content state (sections + line_items + metadata). Subcollection fields are excluded to avoid size-doubling.
+
+Versions are displayed in the **History** tab in the right panel of `OfferBuilderPage`. Snapshot restore (Phase 4) is not yet implemented.
 
 ---
 
@@ -91,7 +97,7 @@ interface WorkflowLogEntry {
   assignee:    { role: string; name: string };
   from_status: OfferStatus | null;
   to_status:   OfferStatus;
-  reason:      string;   // transition reason OR note body
+  reason:      string;
   is_system_generated?: boolean;
   created_at:  string;
 }
@@ -99,65 +105,26 @@ interface WorkflowLogEntry {
 
 ---
 
-## Workflow flow (Phase 1)
+## Workflow transition flow (Phase 1)
 
 1. Transition button in `WorkflowPanel` → `onTransitionRequest(toStatus)`
 2. `OfferBuilderPage` opens `OfferTransitionModal`
 3. Modal collects role + name (required) + reason (required if `REASON_REQUIRED`)
-4. `handleTransitionConfirm(entry)` → builds `systemNote` → calls `addWorkflowLogEntry(offerId, entry, toStatus, systemNote)` — **one atomic writeBatch**
-5. If `toStatus === 'won'` → emits `PLATFORM_EVENTS.OFFER_WON`
-
-Note flow: "Add Note" button → `OfferNoteModal` → `addWorkflowLogEntry(offerId, entry)` (workflow-log only, no status change).
+4. `handleTransitionConfirm(entry)` builds `systemNote` + `versionSnapshot` → single atomic `writeBatch`
+5. If `toStatus === 'won'` → emits `PLATFORM_EVENTS.OFFER_WON` with `{ offerId, offerNumber, clientId, clientName, totalValue }`
+6. `CMSOfferWonHandler` in `CMSLayout` receives the event and opens `CreateContractFromOfferModal`
 
 ---
 
 ## PDF Preview & Export (Phase 2)
 
-### exportOfferToPdf
+**Files:** `offers/utils/exportPdf.ts`, `offers/components/OfferPreviewPortal.tsx`
 
-**File:** `src/modules/offers/utils/exportPdf.ts`
-
-Pipeline: clone element → resolve oklch colors → html2canvas (scale 2) → slice into A4 pages → jsPDF → download.
-
-```typescript
-await exportOfferToPdf(elementId, { filename: 'OFF-2026-0001-proposal.pdf' });
-const blob = await generateOfferPdfBlob(elementId);  // for upload
-```
-
-### OfferPreviewPortal
-
-**File:** `src/modules/offers/components/OfferPreviewPortal.tsx`
-
-```typescript
-<OfferPreviewPortal
-  offer={offer}
-  mode="preview"    // 'preview' | 'download'
-  onClose={() => setPreviewMode(null)}
-/>
-```
-
-**Modes:**
-- `preview` — full-screen modal; toolbar: Download PDF + Print + Close
-- `download` — off-screen render; auto-exports after 2 rAF + 300 ms; calls `onClose`
-
-**Section-type-aware rendering:**
-
-| Section type | Rendered as |
-|---|---|
-| `cover_page` | Styled metadata header (number, client, expiry, status) |
-| `pricing_table` | Live `offer.line_items` table with subtotal / discount / VAT / total |
-| `payment_schedule` | Three KPI cards + section content |
-| `signature_block` | Two-column signature area (Supplier / Client) |
-| All others | `<h2>` title + `dangerouslySetInnerHTML` content |
-
-**Bilingual:** `offer.language` drives `dir`, section title field, font stack, and all body strings.
-
-**Automatic header:** Shown when no `cover_page` section exists.
-
-### Trigger points in OfferBuilderPage
-
-- **Preview button** (Eye icon, top bar) → `setPreviewMode('preview')`
-- **PDF button** (FileDown icon, top bar) → `setPreviewMode('download')` → auto-exports
+- Toolbar buttons in `OfferBuilderPage`: **Preview** (Eye) → modal, **PDF** (FileDown) → direct download
+- `mode: 'preview'` — full-screen modal with Download PDF + Print + Close
+- `mode: 'download'` — off-screen render, auto-exports then `onClose`
+- Section-type rendering: `cover_page`, `pricing_table`, `payment_schedule`, `signature_block` get special treatment; all others render as title + content
+- Bilingual: `offer.language` drives `dir`, title field, font stack
 
 ---
 
@@ -172,7 +139,7 @@ approved → sent_to_client | draft
 sent_to_client → won | lost
 won → archived
 lost → archived
-expired → archived
+expired → archived (inbound requires scheduled function)
 archived → (terminal)
 ```
 
@@ -182,12 +149,12 @@ archived → (terminal)
 
 ## Pages
 
-| Page | Route | Purpose |
+| Page | Route | Right-panel tabs |
 |---|---|---|
-| `OffersDashboardPage` | `/offers` | KPI cards, status breakdown, recent offers |
-| `OffersListPage` | `/offers/list` | List + filters + search + New Offer modal |
-| `OfferBuilderPage` | `/offers/builder/:id` | Three-panel editor + workflow/notes + preview |
-| `TemplatesPage` | `/offers/templates` | Template CRUD |
+| `OffersDashboardPage` | `/offers` | — |
+| `OffersListPage` | `/offers/list` | — |
+| `OfferBuilderPage` | `/offers/builder/:id` | Workflow \| Notes \| History |
+| `TemplatesPage` | `/offers/templates` | — |
 
 ---
 
@@ -196,35 +163,32 @@ archived → (terminal)
 | Collection / Subcollection | Description |
 |---|---|
 | `offers` | Offer documents; embeds `sections[]` and `line_items[]` |
-| `offers/{id}/workflow_log` | Immutable audit trail; create-only |
+| `offers/{id}/workflow_log` | Immutable audit trail |
 | `offers/{id}/notes` | Internal notes; create + update |
+| `offers/{id}/versions` | Immutable content snapshots; one per status transition |
 | `offer_templates` | Template documents |
 | `appSettings/offerCounter` | Atomic sequence counter |
-| `offer_settings/general` | Module config: `workflow_roles[]` (Phase 1+) |
-
----
-
-## Feedback pattern
-
-Inline toast state — no `ToastProvider` dependency. Do not add `alert()` calls.
+| `offer_settings/general` | Module config: `workflow_roles[]` |
 
 ---
 
 ## Cross-module events
 
-| Event | Emitted | Subscriber |
-|---|---|---|
-| `OFFER_WON` | `OfferBuilderPage` on `won` | Phase 3 — CMS listener auto-creates contract draft |
+| Event | Emitted | Payload | Subscriber |
+|---|---|---|---|
+| `OFFER_WON` | `OfferBuilderPage` on `won` | `{ offerId, offerNumber, clientId, clientName, totalValue }` | `CMSOfferWonHandler` in `CMSLayout` → `CreateContractFromOfferModal` |
+
+**Limitation:** Modal only appears when CMS module is mounted. Tracked in docs/08 issue #14.
 
 ---
 
-## Known gaps (Phase 3+)
+## Known gaps (Phase 4+)
 
-- Version history (`OfferVersion` snapshots on save)
-- OFFER_WON subscriber in CMS → CreateContractFromOfferModal
-- Status labels not settings-driven (hardcoded in types.ts)
-- No settings UI for editing `offerWorkflowRoles`
+- Version snapshot restore UI
+- Status labels not settings-driven
+- No settings UI page for `offerWorkflowRoles`
+- PDF export engine duplicated from CMS (Phase 4 → `src/core/utils/exportPdf.ts`)
 - `expired` status needs a scheduled Cloud Function
-- PDF export engine duplicated from CMS (Phase 4 → extract to `src/core/utils/exportPdf.ts`)
+- OFFER_WON handler should be platform-level (not module-level) for full reliability
 
 See `docs/08-known-issues-and-todos.md` for the full tracker.

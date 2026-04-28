@@ -4,12 +4,12 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
 import {
-  Offer, OfferNote, WorkflowLogEntry, LineItem,
-  OfferSection, OfferStatus,
+  Offer, OfferNote, WorkflowLogEntry, OfferVersion,
+  LineItem, OfferSection, OfferStatus,
 } from '../types';
 import { calculateTotals } from '../utils/pricing';
 
-// ── Offers collection ──────────────────────────────────────────────────────────
+// ── Offers collection ─────────────────────────────────────────────────────
 
 export function subscribeOffers(
   onData:  (offers: Offer[]) => void,
@@ -22,12 +22,6 @@ export function subscribeOffers(
   );
 }
 
-/**
- * createOffer — batch write:
- *   1. Creates the offer document.
- *   2. Writes the initial workflow_log subcollection entry.
- * Atomic — both writes succeed or neither does.
- */
 export async function createOffer(
   offer:                Omit<Offer, 'notes' | 'workflow_log'>,
   initialWorkflowEntry: WorkflowLogEntry,
@@ -53,10 +47,6 @@ export async function updateOffer(
 
 // ── workflow_log subcollection ────────────────────────────────────────────────
 
-/**
- * subscribeWorkflowLog — real-time listener on offers/{offerId}/workflow_log.
- * Returns newest-first (orderBy created_at desc).
- */
 export function subscribeWorkflowLog(
   offerId: string,
   onData:  (entries: WorkflowLogEntry[]) => void,
@@ -73,25 +63,25 @@ export function subscribeWorkflowLog(
 }
 
 /**
- * addWorkflowLogEntry — batch write:
- *   1. Writes the log entry to offers/{offerId}/workflow_log/{entry.id}  (immutable)
- *   2. Updates offers/{offerId}.status (if newStatus provided) + updated_at
- *   3. Optionally writes a system OfferNote to offers/{offerId}/notes/{note.id}
+ * addWorkflowLogEntry — atomic writeBatch containing:
+ *   1. workflow_log entry     (immutable subcollection document)
+ *   2. offer status update    (if newStatus provided)
+ *   3. system OfferNote       (if systemNote provided) — fixes issue #9
+ *   4. version snapshot       (if versionSnapshot provided) — Phase 3
  *
- * Atomic — all writes succeed or none do.
- * Fixes #9: system note is no longer a separate fire-and-forget write.
+ * All writes succeed or none do.
  */
 export async function addWorkflowLogEntry(
-  offerId:    string,
-  entry:      WorkflowLogEntry,
-  newStatus?: OfferStatus,
-  systemNote?: OfferNote,
+  offerId:          string,
+  entry:            WorkflowLogEntry,
+  newStatus?:       OfferStatus,
+  systemNote?:      OfferNote,
+  versionSnapshot?: OfferVersion,
 ): Promise<void> {
   const batch    = writeBatch(db);
-  const logRef   = doc(db, 'offers', offerId, 'workflow_log', entry.id);
   const offerRef = doc(db, 'offers', offerId);
 
-  batch.set(logRef, entry);
+  batch.set(doc(db, 'offers', offerId, 'workflow_log', entry.id), entry);
 
   const offerPatch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -103,15 +93,18 @@ export async function addWorkflowLogEntry(
     batch.set(doc(db, 'offers', offerId, 'notes', systemNote.id), systemNote);
   }
 
+  if (versionSnapshot !== undefined) {
+    batch.set(
+      doc(db, 'offers', offerId, 'versions', versionSnapshot.id),
+      versionSnapshot,
+    );
+  }
+
   await batch.commit();
 }
 
 // ── notes subcollection ───────────────────────────────────────────────────────
 
-/**
- * subscribeNotes — real-time listener on offers/{offerId}/notes.
- * Returns newest-first (orderBy created_at desc).
- */
 export function subscribeNotes(
   offerId: string,
   onData:  (notes: OfferNote[]) => void,
@@ -132,6 +125,27 @@ export async function addNote(
   note:    OfferNote,
 ): Promise<void> {
   await setDoc(doc(db, 'offers', offerId, 'notes', note.id), note);
+}
+
+// ── versions subcollection ────────────────────────────────────────────────────
+
+/**
+ * subscribeVersions — real-time listener on offers/{offerId}/versions.
+ * Returns newest-first (orderBy created_at desc).
+ */
+export function subscribeVersions(
+  offerId: string,
+  onData:  (versions: OfferVersion[]) => void,
+  onError: (err: { code: string }) => void,
+): () => void {
+  return onSnapshot(
+    query(
+      collection(db, 'offers', offerId, 'versions'),
+      orderBy('created_at', 'desc'),
+    ),
+    snap => onData(snap.docs.map(d => d.data() as OfferVersion)),
+    err  => onError({ code: (err as any).code ?? 'unknown' }),
+  );
 }
 
 // ── Sections & line items ─────────────────────────────────────────────────────

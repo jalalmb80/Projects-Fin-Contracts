@@ -1,6 +1,8 @@
 export type {
   Offer, OfferTemplate, OfferSection, LineItem,
-  OfferNote, WorkflowLogEntry, WorkflowAssignee, OfferTemplateSection,
+  OfferNote, WorkflowLogEntry, WorkflowAssignee,
+  OfferVersion, OfferVersionSnapshot,
+  OfferTemplateSection,
   OfferStatus, OfferLanguage, OfferCurrency,
   SectionType, NoteType, NoteVisibility,
 } from './types';
@@ -13,6 +15,7 @@ export {
 
 export { useOffers }                                    from './hooks/useOffers';
 export { useOfferDetail }                               from './hooks/useOfferDetail';
+export { useOfferVersions }                             from './hooks/useOfferVersions';
 export { useOffersContext, OffersProvider }              from './context/OffersContext';
 export { useOffersSettings, OffersSettingsProvider }    from './context/OffersSettingsContext';
 export { calculateTotals, calculateLineTotal, formatCurrency } from './utils/pricing';

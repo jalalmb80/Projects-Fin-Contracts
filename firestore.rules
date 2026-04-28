@@ -7,87 +7,61 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // ── Platform-wide shared ──────────────────────────────────────────────────
+    // ── Platform-wide shared ────────────────────────────────────────────────
 
     match /shared_clients/{document=**} {
       allow read, write: if isAuthenticated();
     }
-
     match /platform_settings/{document=**} {
       allow read, write: if isAuthenticated();
     }
 
     // ── Finance ───────────────────────────────────────────────────────────────
 
-    match /projects/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /billingDocuments/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /payments/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /subscriptions/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /counterparties/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /products/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /legalEntities/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /budgetCategories/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /transactions/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /appSettings/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
+    match /projects/{document=**}        { allow read, write: if isAuthenticated(); }
+    match /billingDocuments/{document=**}{ allow read, write: if isAuthenticated(); }
+    match /payments/{document=**}        { allow read, write: if isAuthenticated(); }
+    match /subscriptions/{document=**}   { allow read, write: if isAuthenticated(); }
+    match /counterparties/{document=**}  { allow read, write: if isAuthenticated(); }
+    match /products/{document=**}        { allow read, write: if isAuthenticated(); }
+    match /legalEntities/{document=**}   { allow read, write: if isAuthenticated(); }
+    match /budgetCategories/{document=**}{ allow read, write: if isAuthenticated(); }
+    match /transactions/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /appSettings/{document=**}     { allow read, write: if isAuthenticated(); }
 
-    // ── CMS ───────────────────────────────────────────────────────────────────
+    // ── CMS ─────────────────────────────────────────────────────────────────
 
-    match /cms_contracts/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_clients/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_templates/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_projects/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_settings/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
+    match /cms_contracts/{document=**}   { allow read, write: if isAuthenticated(); }
+    match /cms_clients/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /cms_templates/{document=**}   { allow read, write: if isAuthenticated(); }
+    match /cms_projects/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /cms_settings/{document=**}    { allow read, write: if isAuthenticated(); }
 
-    // ── Offers ────────────────────────────────────────────────────────────────
-    // workflow_log and notes live in subcollections (Phase 0, 2026-04-28).
+    // ── Offers ──────────────────────────────────────────────────────────────
+    // workflow_log, notes, and versions are subcollections (Phase 0+).
 
     match /offers/{offerId} {
       allow read:   if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
-      allow delete: if false; // soft-delete via status='archived' only
+      allow delete: if false;  // soft-delete via status='archived' only
 
-      // Immutable audit trail — create only, no edits or deletes.
+      // Immutable audit trail — create only.
       match /workflow_log/{entryId} {
-        allow read, create: if isAuthenticated();
+        allow read, create:   if isAuthenticated();
         allow update, delete: if false;
       }
 
-      // Notes — create and update allowed (e.g. pin toggle).
-      // Deletion disallowed to preserve history.
+      // Notes — create + update (pin toggle). No delete.
       match /notes/{noteId} {
         allow read, create, update: if isAuthenticated();
-        allow delete: if false;
+        allow delete:               if false;
+      }
+
+      // Version snapshots — create only. Immutable content record.
+      match /versions/{versionId} {
+        allow read, create:   if isAuthenticated();
+        allow update, delete: if false;
       }
     }
 
@@ -95,15 +69,14 @@ service cloud.firestore {
       allow read:   if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
-      allow delete: if false; // archive only
+      allow delete: if false;
     }
 
-    // Offer module settings — workflow roles and future config.
     match /offer_settings/{document=**} {
       allow read, write: if isAuthenticated();
     }
 
-    // ── Default deny ──────────────────────────────────────────────────────────
+    // ── Default deny ────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

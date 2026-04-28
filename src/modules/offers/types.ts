@@ -45,12 +45,9 @@ export type NoteType =
 export type NoteVisibility = 'internal' | 'external';
 
 // ── Workflow Assignee ─────────────────────────────────────────────────────────
-// Mirrors CMS WorkflowAssignee — parity with contracts module.
 
 export interface WorkflowAssignee {
-  /** Role selected from offerWorkflowRoles (offer_settings/general) or free text. */
   role: string;
-  /** Full name of the person responsible for the next step. Required. */
   name: string;
 }
 
@@ -98,32 +95,42 @@ export interface OfferNote {
 }
 
 // ── Workflow Log ──────────────────────────────────────────────────────────────
-// Shape mirrors CMS WorkflowEvent — parity achieved in Phase 1.
 
 export interface WorkflowLogEntry {
   id: string;
-  /**
-   * 'transition' — status changed.
-   * 'note'       — status unchanged; manual audit comment.
-   */
   type: 'transition' | 'note';
   actor_name: string;
   actor_email: string;
-  /**
-   * The person responsible for the next step.
-   * Collected via OfferTransitionModal / OfferNoteModal.
-   */
   assignee: WorkflowAssignee;
   from_status: OfferStatus | null;
   to_status: OfferStatus;
-  /**
-   * Free-text reason (transitions) or note body (type==='note').
-   * Required when type === 'note' or when status is in REASON_REQUIRED.
-   */
   reason: string;
-  /** True when written by the system (e.g. on offer creation). */
   is_system_generated?: boolean;
   created_at: string;
+}
+
+// ── Version history ──────────────────────────────────────────────────────────
+
+/**
+ * OfferVersionSnapshot captures the full offer content at a point in time.
+ * Excludes subcollection fields (notes, workflow_log) — those are never
+ * embedded in the snapshot to keep document size bounded.
+ */
+export type OfferVersionSnapshot = Omit<Offer, 'notes' | 'workflow_log'>;
+
+/**
+ * OfferVersion is stored in the offers/{id}/versions subcollection.
+ * One version is written automatically on each status transition (same
+ * writeBatch as the log entry). Manual snapshots are Phase 4.
+ */
+export interface OfferVersion {
+  id: string;
+  /** Monotonically increments; equals workflowLog.length at time of capture. */
+  version_number: number;
+  created_at: string;
+  /** Human-readable label, e.g. "Status: Draft → Under Review" */
+  change_summary: string;
+  snapshot: OfferVersionSnapshot;
 }
 
 // ── Core Entities ─────────────────────────────────────────────────────────────
@@ -155,15 +162,9 @@ export interface Offer {
   created_by: string;
   created_at: string;
   updated_at: string;
-  /**
-   * @deprecated Embedded array — migrated to offers/{id}/notes subcollection (Phase 0).
-   * Present only on documents created before 2026-04-28.
-   */
+  /** @deprecated Subcollection since Phase 0. Present only on pre-2026-04-28 documents. */
   notes?: OfferNote[];
-  /**
-   * @deprecated Embedded array — migrated to offers/{id}/workflow_log subcollection (Phase 0).
-   * Present only on documents created before 2026-04-28.
-   */
+  /** @deprecated Subcollection since Phase 0. Present only on pre-2026-04-28 documents. */
   workflow_log?: WorkflowLogEntry[];
 }
 
@@ -261,7 +262,6 @@ export const NOTE_TYPE_LABELS: Record<NoteType, { en: string; ar: string }> = {
   reminder:             { en: 'Reminder',             ar: '\u062a\u0630\u0643\u064a\u0631' },
 };
 
-/** Default workflow roles — overridden by offer_settings/general.workflow_roles. */
 export const DEFAULT_OFFER_WORKFLOW_ROLES: string[] = [
   'Offer Manager',
   'Technical Reviewer',

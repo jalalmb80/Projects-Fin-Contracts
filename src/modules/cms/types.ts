@@ -20,14 +20,16 @@ export interface PartyOneEntity {
   is_default: boolean;
 }
 
-// ── Contract status config ────────────────────────────────────────────────────
-export interface ContractStatusConfig {
+// ── Contract status config ─────────────────────────────────────────────────────
+interface ContractStatusConfig {
   id: string;
   label: string;
   is_win: boolean;
   is_lose: boolean;
   color?: string;
 }
+
+export type { ContractStatusConfig };
 
 export interface AppSettings {
   entities: PartyOneEntity[];
@@ -40,41 +42,21 @@ export interface AppSettings {
 export type ContractStatus = string;
 export type ContractType   = string;
 
-export type AppendixType = 'قائمة الخدمات' | 'التهيئة التقنية' | 'العرض الفني' | 'قائمة الأسعار' | 'أخرى';
-export type ArticleType  = 'تمهيد' | 'موضوع' | 'مدة التنفيذ' | 'القيمة والدفعات' | 'الملكية الفكرية' | 'إدارة المشروع' | 'طلبات التغيير' | 'إنهاء الاتفاقية' | 'أحكام عامة' | 'نسخ الاتفاقية' | 'مخصص';
+export type AppendixType = '\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u062e\u062f\u0645\u0627\u062a' | '\u0627\u0644\u062a\u0647\u064a\u0626\u0629 \u0627\u0644\u062a\u0642\u0646\u064a\u0629' | '\u0627\u0644\u0639\u0631\u0636 \u0627\u0644\u0641\u0646\u064a' | '\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0623\u0633\u0639\u0627\u0631' | '\u0623\u062e\u0631\u0649';
+export type ArticleType  = '\u062a\u0645\u0647\u064a\u062f' | '\u0645\u0648\u0636\u0648\u0639' | '\u0645\u062f\u0629 \u0627\u0644\u062a\u0646\u0641\u064a\u0630' | '\u0627\u0644\u0642\u064a\u0645\u0629 \u0648\u0627\u0644\u062f\u0641\u0639\u0627\u062a' | '\u0627\u0644\u0645\u0644\u0643\u064a\u0629 \u0627\u0644\u0641\u0643\u0631\u064a\u0629' | '\u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0645\u0634\u0631\u0648\u0639' | '\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u062a\u063a\u064a\u064a\u0631' | '\u0625\u0646\u0647\u0627\u0621 \u0627\u0644\u0627\u062a\u0641\u0627\u0642\u064a\u0629' | '\u0623\u062d\u0643\u0627\u0645 \u0639\u0627\u0645\u0629' | '\u0646\u0633\u062e \u0627\u0644\u0627\u062a\u0641\u0627\u0642\u064a\u0629' | '\u0645\u062e\u0635\u0635';
 
 export type ArticleBlockType = 'paragraph' | 'list' | 'page_break';
 
-export interface ParagraphBlock {
-  id: string;
-  type: 'paragraph';
-  text_ar: string;
-}
-
-export interface ListBlockItem {
-  id: string;
-  text_ar: string;
-}
-
-export interface ListBlock {
-  id: string;
-  type: 'list';
-  style: 'ordered' | 'unordered' | 'alpha';
-  items: ListBlockItem[];
-}
-
-export interface PageBreakBlock {
-  id: string;
-  type: 'page_break';
-  label?: string;
-}
-
+export interface ParagraphBlock { id: string; type: 'paragraph'; text_ar: string; }
+export interface ListBlockItem  { id: string; text_ar: string; }
+export interface ListBlock      { id: string; type: 'list'; style: 'ordered' | 'unordered' | 'alpha'; items: ListBlockItem[]; }
+export interface PageBreakBlock { id: string; type: 'page_break'; label?: string; }
 export type ArticleBlock = ParagraphBlock | ListBlock | PageBreakBlock;
 
 export interface Client {
   id: string;
   name_ar: string;
-  entity_type: 'شركة' | 'جمعية' | 'جهة حكومية' | 'فرد';
+  entity_type: '\u0634\u0631\u0643\u0629' | '\u062c\u0645\u0639\u064a\u0629' | '\u062c\u0647\u0629 \u062d\u0643\u0648\u0645\u064a\u0629' | '\u0641\u0631\u062f';
   license_authority: string;
   license_no: string;
   representative_name: string;
@@ -112,7 +94,7 @@ export interface TaskRow {
   task_name_ar: string;
   duration: string;
   cost_sar: number;
-  frequency: 'مرة واحدة' | 'سنوي' | 'شهري';
+  frequency: '\u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629' | '\u0633\u0646\u0648\u064a' | '\u0634\u0647\u0631\u064a';
 }
 
 export interface PaymentSchedule {
@@ -139,7 +121,7 @@ export interface Attachment {
   id: string;
   title: string;
   file_type: string;
-  attachment_type: 'العرض الفني' | 'التصاميم' | 'وثيقة النطاق' | 'أخرى';
+  attachment_type: '\u0627\u0644\u0639\u0631\u0636 \u0627\u0644\u0641\u0646\u064a' | '\u0627\u0644\u062a\u0635\u0627\u0645\u064a\u0645' | '\u0648\u062b\u064a\u0642\u0629 \u0627\u0644\u0646\u0637\u0627\u0642' | '\u0623\u062e\u0631\u0649';
   uploaded_at: string;
 }
 
@@ -150,50 +132,39 @@ export interface ContractVersion {
   snapshot: Omit<Contract, 'versions'>;
 }
 
-// ── Workflow ──────────────────────────────────────────────────────────────────
+// ── Workflow ───────────────────────────────────────────────────────────────────
 
-/**
- * The person/team responsible for the next action after this event.
- * role  = selected from the configurable workflow_roles list (or free-typed if 'أخرى')
- * name  = always free text — the actual individual's name
- */
 export interface WorkflowAssignee {
   role: string;
   name: string;
 }
 
-/**
- * A single entry in the contract's audit trail.
- *
- * type === 'transition'  → status changed from from_status to to_status
- * type === 'note'        → from_status === to_status (status unchanged, note added)
- */
 export interface WorkflowEvent {
   id: string;
   type: 'transition' | 'note';
-  from_status: string | null;   // null reserved for future first-event use
+  from_status: string | null;
   to_status: string;
   assignee: WorkflowAssignee;
-  note: string;                 // required for 'note' type; optional for 'transition'
-  actor_name: string;           // Firebase user displayName ?? email prefix
+  note: string;
+  actor_name: string;
   actor_email: string;
-  created_at: string;           // ISO timestamp
+  created_at: string;
 }
 
 export type ProjectType =
-  | 'تطوير منصة'
-  | 'تطوير تطبيق'
-  | 'موقع إلكتروني'
-  | 'اشتراك سنوي'
-  | 'تهيئة وتشغيل'
-  | 'استشارات'
-  | 'أخرى';
+  | '\u062a\u0637\u0648\u064a\u0631 \u0645\u0646\u0635\u0629'
+  | '\u062a\u0637\u0648\u064a\u0631 \u062a\u0637\u0628\u064a\u0642'
+  | '\u0645\u0648\u0642\u0639 \u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a'
+  | '\u0627\u0634\u062a\u0631\u0627\u0643 \u0633\u0646\u0648\u064a'
+  | '\u062a\u0647\u064a\u0626\u0629 \u0648\u062a\u0634\u063a\u064a\u0644'
+  | '\u0627\u0633\u062a\u0634\u0627\u0631\u0627\u062a'
+  | '\u0623\u062e\u0631\u0649';
 
 export type ProjectStatus =
-  | 'مخطط'
-  | 'قيد التنفيذ'
-  | 'مكتمل'
-  | 'معلّق';
+  | '\u0645\u062e\u0637\u0637'
+  | '\u0642\u064a\u062f \u0627\u0644\u062a\u0646\u0641\u064a\u0630'
+  | '\u0645\u0643\u062a\u0645\u0644'
+  | '\u0645\u0639\u0644\u0651\u0642';
 
 export interface Project {
   id: string;
@@ -225,16 +196,21 @@ export interface Contract {
   attachments: Attachment[];
   versions: ContractVersion[];
   tags: string[];
-  /** Workflow audit trail. Absent on pre-workflow contracts — always read as ?? [] */
   workflow_events?: WorkflowEvent[];
+  /**
+   * ID of the Offer that was won to produce this contract.
+   * Set by CreateContractFromOfferModal (Phase 3).
+   * Absent on contracts created directly in the CMS.
+   */
+  linked_offer_id?: string;
 }
 
 export type ContractTemplateCategory =
-  | 'تطوير برمجيات'
-  | 'اشتراك/SaaS'
-  | 'إنتاج محتوى'
-  | 'مختلط'
-  | 'مخصص';
+  | '\u062a\u0637\u0648\u064a\u0631 \u0628\u0631\u0645\u062c\u064a\u0627\u062a'
+  | '\u0627\u0634\u062a\u0631\u0627\u0643/SaaS'
+  | '\u0625\u0646\u062a\u0627\u062c \u0645\u062d\u062a\u0648\u0649'
+  | '\u0645\u062e\u062a\u0644\u0637'
+  | '\u0645\u062e\u0635\u0635';
 
 export interface ContractTemplate {
   id: string;
@@ -253,29 +229,29 @@ export interface ContractTemplate {
 
 // ── Default lists ─────────────────────────────────────────────────────────────
 export const DEFAULT_CONTRACT_STATUSES: ContractStatusConfig[] = [
-  { id: 'draft',     label: 'مسودة',        is_win: false, is_lose: false, color: 'gray'    },
-  { id: 'review',    label: 'قيد المراجعة', is_win: false, is_lose: false, color: 'yellow'  },
-  { id: 'approved',  label: 'معتمد',        is_win: false, is_lose: false, color: 'blue'    },
-  { id: 'signed',    label: 'موقّع',        is_win: true,  is_lose: false, color: 'emerald' },
-  { id: 'active',    label: 'نشط',          is_win: true,  is_lose: false, color: 'green'   },
-  { id: 'completed', label: 'مكتمل',        is_win: true,  is_lose: false, color: 'teal'    },
-  { id: 'expired',   label: 'منتهي',        is_win: false, is_lose: false, color: 'orange'  },
-  { id: 'cancelled', label: 'ملغى',         is_win: false, is_lose: true,  color: 'red'     },
-  { id: 'lost',      label: 'خسارة',        is_win: false, is_lose: true,  color: 'red'     },
+  { id: 'draft',     label: '\u0645\u0633\u0648\u062f\u0629',        is_win: false, is_lose: false, color: 'gray'    },
+  { id: 'review',    label: '\u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629', is_win: false, is_lose: false, color: 'yellow'  },
+  { id: 'approved',  label: '\u0645\u0639\u062a\u0645\u062f',        is_win: false, is_lose: false, color: 'blue'    },
+  { id: 'signed',    label: '\u0645\u0648\u0642\u0651\u0639',        is_win: true,  is_lose: false, color: 'emerald' },
+  { id: 'active',    label: '\u0646\u0634\u0637',          is_win: true,  is_lose: false, color: 'green'   },
+  { id: 'completed', label: '\u0645\u0643\u062a\u0645\u0644',        is_win: true,  is_lose: false, color: 'teal'    },
+  { id: 'expired',   label: '\u0645\u0646\u062a\u0647\u064a',        is_win: false, is_lose: false, color: 'orange'  },
+  { id: 'cancelled', label: '\u0645\u0644\u063a\u0649',         is_win: false, is_lose: true,  color: 'red'     },
+  { id: 'lost',      label: '\u062e\u0633\u0627\u0631\u0629',        is_win: false, is_lose: true,  color: 'red'     },
 ];
 
 export const DEFAULT_CONTRACT_TYPES: string[] = [
-  'تطوير برمجيات',
-  'اشتراك/SaaS',
-  'إنتاج محتوى',
-  'مختلط',
+  '\u062a\u0637\u0648\u064a\u0631 \u0628\u0631\u0645\u062c\u064a\u0627\u062a',
+  '\u0627\u0634\u062a\u0631\u0627\u0643/SaaS',
+  '\u0625\u0646\u062a\u0627\u062c \u0645\u062d\u062a\u0648\u0649',
+  '\u0645\u062e\u062a\u0644\u0637',
 ];
 
 export const DEFAULT_WORKFLOW_ROLES: string[] = [
-  'مدير العقود',
-  'فريق القانوني',
-  'مدير المبيعات',
-  'فريق التنفيذ',
-  'الإدارة العليا',
-  'أخرى',
+  '\u0645\u062f\u064a\u0631 \u0627\u0644\u0639\u0642\u0648\u062f',
+  '\u0641\u0631\u064a\u0642 \u0627\u0644\u0642\u0627\u0646\u0648\u0646\u064a',
+  '\u0645\u062f\u064a\u0631 \u0627\u0644\u0645\u0628\u064a\u0639\u0627\u062a',
+  '\u0641\u0631\u064a\u0642 \u0627\u0644\u062a\u0646\u0641\u064a\u0630',
+  '\u0627\u0644\u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0639\u0644\u064a\u0627',
+  '\u0623\u062e\u0631\u0649',
 ];
