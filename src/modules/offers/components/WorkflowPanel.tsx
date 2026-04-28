@@ -17,18 +17,21 @@ const TRANSITION_LABELS: Partial<Record<OfferStatus, string>> = {
 };
 
 interface Props {
-  offer: Offer;
+  offer:       Offer;
+  /** Workflow log entries from the offers/{id}/workflow_log subcollection. */
+  workflowLog: WorkflowLogEntry[];
   onTransition: (toStatus: OfferStatus, reason: string) => Promise<void>;
 }
 
-export default function WorkflowPanel({ offer, onTransition }: Props) {
+export default function WorkflowPanel({ offer, workflowLog, onTransition }: Props) {
   const [selectedStatus, setSelectedStatus] = useState<OfferStatus | null>(null);
   const [reason,         setReason]         = useState('');
   const [saving,         setSaving]         = useState(false);
   const [error,          setError]          = useState('');
 
   const available = getAvailableTransitions(offer.status);
-  const log       = offer.workflow_log ?? [];
+  // workflowLog is already sorted newest-first by subscribeWorkflowLog (orderBy created_at desc)
+  const log = workflowLog;
 
   async function handleConfirm() {
     if (!selectedStatus) return;
@@ -42,7 +45,7 @@ export default function WorkflowPanel({ offer, onTransition }: Props) {
       await onTransition(selectedStatus, reason.trim());
       setSelectedStatus(null);
       setReason('');
-    } catch (e) {
+    } catch {
       setError('Failed to update. Please try again.');
     } finally {
       setSaving(false);

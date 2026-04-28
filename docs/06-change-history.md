@@ -10,7 +10,7 @@ This document records every meaningful change made to the project, including the
 
 ### `c34925c` — Initial commit *(2026-04-07)*
 
-GitHub's automatic initial commit. Created the repository.
+GitHub’s automatic initial commit. Created the repository.
 
 ---
 
@@ -29,7 +29,7 @@ Established the modular platform shell:
 ### `a5520bf` — Integrate Firebase authentication and Firestore *(2026-04-07)*
 
 - Wired Firebase Auth into `PlatformContext`
-- Created `useContracts` hook to replace the CMS module's in-memory mock data with real Firestore listeners
+- Created `useContracts` hook to replace the CMS module’s in-memory mock data with real Firestore listeners
 - Updated CMS pages (`CMSClientsPage`, `CMSProjectsPage`, `ContractsPage`) to use the hook
 - Added `.env.example` with all required Firebase and Google Cloud variables
 
@@ -125,12 +125,10 @@ Established the modular platform shell:
 **File modified:** `components/ContractEditor.tsx`
 
 - Added `GitBranch`-icon **سجل الإجراءات** tab with event-count badge
-- Metadata tab status select now calls `handleStatusChangeRequest()` instead of directly mutating state; the select has an amber border to signal it is workflow-tracked
+- Metadata tab status select now calls `handleStatusChangeRequest()` instead of directly mutating state
 - `handleStatusChangeRequest` → sets `pendingStatus` → opens `WorkflowTransitionModal`
-- `handleTransitionConfirm` → calls `addWorkflowEvent()` → updates local state → fires win-status side effects (Finance modal + platformBus)
-- `handleNoteConfirm` → calls `addWorkflowEvent()` without status change
+- `handleTransitionConfirm` → calls `addWorkflowEvent()` → updates local state → fires win-status side effects
 - Version diff comparison excludes `workflow_events` from the change check
-- New contracts initialize with `workflow_events: []`
 
 ---
 
@@ -138,17 +136,8 @@ Established the modular platform shell:
 
 **Files modified:** `components/ContractsList.tsx`, `pages/CMSSettingsPage.tsx`
 
-**ContractsList (Phase 6):**
-- Kebab menu "تغيير الحالة" no longer calls `updateContract` directly
-- Flow: kebab click → inline status picker popover → user picks new status → `WorkflowTransitionModal` → `addWorkflowEvent()`
-- Old `StatusPopover` component removed; replaced by simpler inline picker that appears next to the row's actions cell
-- `getStatusColor()` now derives colors from `contractStatuses` config instead of hardcoded Arabic strings
-
-**CMSSettingsPage (Phase 7):**
-- Added "أدوار سير العمل" section (same pattern as contract_statuses and contract_types)
-- Roles list with inline edit/delete per row; "إضافة دور" input; persists via `updateWorkflowRoles()`
-- `SectionHeader` component updated to accept `'roles'` as a `which` value
-- `GitBranch` icon in section header for visual distinction
+- ContractsList: kebab menu “تغيير الحالة” now goes through `WorkflowTransitionModal`
+- CMSSettingsPage: added workflow roles section with inline edit/delete and persistence via `updateWorkflowRoles()`
 
 ---
 
@@ -156,49 +145,37 @@ Established the modular platform shell:
 
 **Files changed:** `DashboardPage.tsx`, `ProjectListPage.tsx`, `ProjectDetailPage.tsx`
 
-**DashboardPage:**
-- Expanded KPI grid from 4 cards to 6 (added Active Projects + Active Subscriptions)
-- Revenue Trend chart now computed from real AR invoice data (last 6 months grouped by `invoice.date`) — previously used 100% mocked static data
-- Greeting is now time-aware: صباح الخير / مساء الخير / مساء النور (Good morning / afternoon / evening)
-- Added overdue quick-link badge in header when overdueCount > 0
-- Status badges now use `tEnum()` — no more raw enum strings in Arabic mode
-- Invoice type column uses `tEnum()` on `invoice.type`
-- Recent invoices sorted by `updatedAt desc` (was slice order)
-- "View all" link to /finance/billing added
-- Pie chart legend bilingual via `t()`, with empty-state fallback when both values are 0
-- Removed unused `useState`, `ArrowUpRight`, `ArrowDownRight` imports
-
-**ProjectListPage:**
-- Status dropdown options now use `tEnum()` — Arabic labels in AR mode, English in EN mode
-- Status badges use `tEnum()`
-- Contract type column uses `tEnum()`
-- "Started" label uses `t()` (was hardcoded English)
-- Added End Date column with `AlertCircle` icon and rose color when project is overdue (endDate < today and status is not Completed/Cancelled)
-- Added result count bar when filter is active: "Showing X of Y"
-- Added `<tfoot>` summary showing count + active count
-- Budget Health bar: overflow indicator (AlertCircle icon) when budgetPct > 100
-- Improved visual styling: `slate` palette, `rounded-xl`, primary-600 button
-- Added `isPast`, `parseISO` from date-fns
-
-**ProjectDetailPage:**
-- Imported `useLang, t, tEnum` from LanguageContext; added `const { lang } = useLang()`
-- Tabs refactored: replaced `['Overview','Milestones','Budget','Documents'].map(tab => tab.toLowerCase())` with typed `TABS` constant `{ key, ar, en }[]` — tab keys are type-safe, labels bilingual via `t(ar, en, lang)`
-- All UI labels translated throughout: header fields (Client, Contract, Contract Value), all 4 tab contents (section headers, column headers, empty states), all modal titles and form field labels, all ConfirmDialog titles and messages
-- Status badges use `tEnum()` for project status, milestone status, and document status
-- Milestone status dropdown uses `tEnum()` in select options
-- "Project not found" state translated with icon
-- `Briefcase` icon added (was unused import, now used in not-found state)
-- Removed unused `Calendar`, `Clock`, `AlertCircle` from imports — replaced by specific used icons
+- Dashboard: real revenue trend, 6 KPI cards, time-aware greeting, overdue quick-link, `tEnum()` status badges
+- ProjectListPage: end-date column with overdue indicator, result count bar, budget overflow badge, `tEnum()` labels
+- ProjectDetailPage: all tabs and labels fully bilingual via `t()` / `tEnum()`
 
 ---
 
-## Source project lineage
+### Phase 0 — feat(offers): OffersProvider, atomic offer numbering, subcollection audit trail *(2026-04-28)*
 
-This project was built by merging two standalone apps:
+**Motivation:** Pre-Phase-0 offers had three architectural problems: (1) `useOffers()` called independently from every page opened duplicate Firestore listeners; (2) offer numbers used `Math.random()` with birthday-collision risk; (3) `workflow_log` and `notes` embedded as arrays risked hitting Firestore’s 1 MB document limit on large offers.
 
-| Source repo | Became | Key characteristics |
-|---|---|---|
-| `jalalmb80/FinArchiTec2_1-main` | `src/modules/finance/` | Firebase, full routing, AppContext reducer |
-| `jalalmb80/contracts-main` | `src/modules/cms/` | In-memory mock data, Arabic-only, no Firebase |
+**Files created:**
+- `src/modules/offers/context/OffersContext.tsx` — `OffersProvider` + `useOffersContext()`
+- `src/modules/offers/hooks/useOfferDetail.ts` — per-offer subcollection subscriptions
+- `docs/09-offers-module.md` — full module documentation
 
-The merge introduced: shared AppShell, PlatformContext, platformBus, lazy module loading, and Firebase connectivity for the CMS module.
+**Files modified:**
+- `src/modules/offers/types.ts` — `WorkflowLogEntry.is_system_generated?: boolean` added (fixes silent `as any` cast); `Offer.notes` and `Offer.workflow_log` marked `@deprecated` and made optional
+- `src/modules/offers/utils/offerNumber.ts` — rewritten as `async`; uses `runTransaction` on `appSettings/offerCounter` (same pattern as Finance invoice counter)
+- `src/modules/offers/services/offerService.ts` — `createOffer` now accepts `(offer, initialWorkflowEntry)` and uses `writeBatch`; `addWorkflowLogEntry` uses `writeBatch` (status + subcollection entry atomic); `addNote` writes to subcollection; `subscribeWorkflowLog` and `subscribeNotes` added
+- `src/modules/offers/hooks/useOffers.ts` — updated comment; exposes new `createOffer` signature transparently
+- `src/modules/offers/components/OffersLayout.tsx` — wraps with `OffersProvider`; moved user-email footer out to keep layout clean
+- `src/modules/offers/components/WorkflowPanel.tsx` — `workflowLog: WorkflowLogEntry[]` added as explicit prop; removes dependency on deprecated `offer.workflow_log`
+- `src/modules/offers/pages/OffersDashboardPage.tsx` — `useOffersContext()` replaces `useOffers()`
+- `src/modules/offers/pages/OffersListPage.tsx` — `useOffersContext()`, `await generateOfferNumber()`, new `createOffer(offer, initialEntry)` call pattern, `STATUS_LABELS` used for filter chip labels
+- `src/modules/offers/pages/TemplatesPage.tsx` — `useOffersContext()`
+- `src/modules/offers/pages/OfferBuilderPage.tsx` — `useOffersContext()` + `useOfferDetail(id)`; `WorkflowPanel` receives `workflowLog` prop; `NotesPanel` receives `notes` from subcollection; notes badge uses `notes.length`; removed unused `Edit3` import
+- `src/modules/offers/index.ts` — exports `useOffersContext`, `OffersProvider`, `useOfferDetail`
+- `firestore.rules` — subcollection rules nested inside `/offers/{offerId}`: `workflow_log` create-only (immutable audit trail), `notes` create+update (pin toggle)
+
+**Design decisions:**
+- `workflow_log` uses `orderBy('created_at', 'desc')` at the query level; no client-side sort needed
+- `notes` subcollection also newest-first so `notes.length` for the tab badge is correct from first snapshot
+- Pre-Phase-0 documents with embedded `notes`/`workflow_log` arrays are ignored silently (optional fields); no migration script needed for single-tenant usage
+- `addNote` (system note on transition) remains a separate write; Phase 1 will batch it with `addWorkflowLogEntry` for full atomicity

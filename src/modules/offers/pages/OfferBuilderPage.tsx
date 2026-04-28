@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, GitBranch, Eye, Edit3 } from 'lucide-react';
-import { useOffers } from '../hooks/useOffers';
+import { ArrowLeft, MessageSquare, GitBranch, Eye } from 'lucide-react';
+import { useOffersContext } from '../context/OffersContext';
+import { useOfferDetail } from '../hooks/useOfferDetail';
 import { usePlatform } from '../../../core/context/PlatformContext';
 import { platformBus, PLATFORM_EVENTS } from '../../../core/events/platformBus';
 import {
@@ -19,13 +20,18 @@ type RightTab = 'workflow' | 'notes';
 const READ_ONLY_STATUSES: OfferStatus[] = ['approved', 'sent_to_client', 'won', 'lost', 'archived'];
 
 export default function OfferBuilderPage() {
-  const { id }     = useParams<{ id: string }>();
-  const navigate   = useNavigate();
-  const { user }   = usePlatform();
+  const { id }   = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user } = usePlatform();
+
+  // Top-level offer data from OffersProvider (single listener, no duplication)
   const {
     offers, updateOffer, addWorkflowLogEntry,
     addNote, updateSections, updateLineItems,
-  } = useOffers();
+  } = useOffersContext();
+
+  // Per-offer subcollection data (workflow_log + notes)
+  const { workflowLog, notes } = useOfferDetail(id);
 
   const offer = offers.find(o => o.id === id);
 
@@ -39,7 +45,7 @@ export default function OfferBuilderPage() {
       const sorted = [...offer.sections].sort((a, b) => a.position - b.position);
       setActiveSectionId(sorted[0].id);
     }
-  }, [offer?.id, offer?.sections.length]);
+  }, [offer?.id]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -67,8 +73,8 @@ export default function OfferBuilderPage() {
   // ── Section mutations ───────────────────────────────────────────────────────
 
   async function handleAddSection(type: SectionType) {
-    const label    = SECTION_TYPE_LABELS[type];
-    const maxPos   = sorted.length > 0 ? Math.max(...sorted.map(s => s.position)) : 0;
+    const label  = SECTION_TYPE_LABELS[type];
+    const maxPos = sorted.length > 0 ? Math.max(...sorted.map(s => s.position)) : 0;
     const newSec: OfferSection = {
       id:         crypto.randomUUID(),
       type,
@@ -94,13 +100,12 @@ export default function OfferBuilderPage() {
     }
   }
 
-  function move(sectionId: string, dir: 1 | -1) {
+  function move(sectionId: string, direction: 1 | -1) {
     const list = [...sorted];
     const idx  = list.findIndex(s => s.id === sectionId);
     if (idx === -1) return;
-    const target = idx + dir;
+    const target = idx + direction;
     if (target < 0 || target >= list.length) return;
-    // Swap positions
     const aPos = list[idx].position;
     const bPos = list[target].position;
     const next = offer.sections.map(s => {
@@ -151,17 +156,17 @@ export default function OfferBuilderPage() {
       reason,
       created_at:  new Date().toISOString(),
     };
+    // addWorkflowLogEntry now uses writeBatch: status + subcollection entry are atomic
     await addWorkflowLogEntry(offer.id, entry, toStatus);
 
-    // Add system note for the transition
+    // System note — written separately (Phase 1 will batch this with the log entry)
     const systemNote: OfferNote = {
       id:                  crypto.randomUUID(),
       author_name:         'System',
       author_email:        '',
       note_type:           'approval_decision',
       visibility:          'internal',
-      body:                `Status changed to "${toStatus.replace(/_/g, ' ')}"
-${reason ? `Reason: ${reason}` : ''}`.trim(),
+      body:                `Status changed to "${toStatus.replace(/_/g, ' ')}"${reason ? `\nReason: ${reason}` : ''}`.trim(),
       parent_note_id:      null,
       is_system_generated: true,
       is_pinned:           false,
@@ -179,7 +184,7 @@ ${reason ? `Reason: ${reason}` : ''}`.trim(),
       });
     }
 
-    showToast(`Status updated to ${toStatus.replace(/_/g, ' ')}`);
+    showToast(`Status updated to ${STATUS_LABELS[toStatus]?.en ?? toStatus}`);
   }
 
   async function handleAddNote(note: OfferNote) {
@@ -231,8 +236,8 @@ ${reason ? `Reason: ${reason}` : ''}`.trim(),
           activeSectionId={activeSectionId}
           language={offer.language}
           onSelect={setActiveSectionId}
-          onMoveUp={id => move(id, -1)}
-          onMoveDown={id => move(id, 1)}
+          onMoveUp={sid => move(sid, -1)}
+          onMoveDown={sid => move(sid, 1)}
           onRemove={handleRemoveSection}
           onAddSection={handleAddSection}
         />
@@ -271,9 +276,9 @@ ${reason ? `Reason: ${reason}` : ''}`.trim(),
               }`}
             >
               <MessageSquare size={12} /> Notes
-              {offer.notes.length > 0 && (
+              {notes.length > 0 && (
                 <span className="ml-0.5 bg-violet-100 text-violet-700 text-xs rounded-full px-1.5">
-                  {offer.notes.length}
+                  {notes.length}
                 </span>
               )}
             </button>
@@ -284,11 +289,12 @@ ${reason ? `Reason: ${reason}` : ''}`.trim(),
             {rightTab === 'workflow' ? (
               <WorkflowPanel
                 offer={offer}
+                workflowLog={workflowLog}
                 onTransition={handleTransition}
               />
             ) : (
               <NotesPanel
-                notes={offer.notes}
+                notes={notes}
                 onAddNote={handleAddNote}
               />
             )}

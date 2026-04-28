@@ -1,25 +1,16 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { FileText, LayoutDashboard, Layers, Settings, ChevronLeft } from 'lucide-react';
+import { Outlet, NavLink } from 'react-router-dom';
+import { FileText, LayoutDashboard, Layers } from 'lucide-react';
 import { usePlatform } from '../../../core/context/PlatformContext';
+import { OffersProvider } from '../context/OffersContext';
 
 const NAV = [
-  { to: '/offers',           icon: LayoutDashboard, label: 'Dashboard',  labelAr: '\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645', end: true },
-  { to: '/offers/list',      icon: FileText,        label: 'Offers',     labelAr: '\u0627\u0644\u0639\u0631\u0648\u0636' },
-  { to: '/offers/templates', icon: Layers,          label: 'Templates',  labelAr: '\u0627\u0644\u0642\u0648\u0627\u0644\u0628' },
+  { to: '/offers',           icon: LayoutDashboard, label: 'Dashboard',  end: true },
+  { to: '/offers/list',      icon: FileText,        label: 'Offers'           },
+  { to: '/offers/templates', icon: Layers,          label: 'Templates'        },
 ];
 
-export default function OffersLayout() {
-  const { user } = usePlatform();
-
-  if (!user) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <p className="text-slate-400 text-sm">Not authenticated</p>
-      </div>
-    );
-  }
-
+function OffersLayoutInner() {
   return (
     <div className="flex h-full w-full bg-slate-50">
       {/* Sidebar */}
@@ -54,9 +45,7 @@ export default function OffersLayout() {
         </nav>
 
         <div className="p-3 border-t border-slate-100">
-          <div className="px-3 py-2 text-xs text-slate-400">
-            {user.email}
-          </div>
+          {/* Footer slot — intentionally minimal */}
         </div>
       </aside>
 
@@ -65,5 +54,25 @@ export default function OffersLayout() {
         <Outlet />
       </main>
     </div>
+  );
+}
+
+export default function OffersLayout() {
+  const { user } = usePlatform();
+
+  if (!user) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <p className="text-slate-400 text-sm">Not authenticated</p>
+      </div>
+    );
+  }
+
+  // OffersProvider runs useOffers() exactly once here — all child pages
+  // consume via useOffersContext() without opening duplicate listeners.
+  return (
+    <OffersProvider>
+      <OffersLayoutInner />
+    </OffersProvider>
   );
 }

@@ -10,7 +10,9 @@ export {
   SECTION_TYPE_LABELS, NOTE_TYPE_LABELS,
 } from './types';
 
-export { useOffers } from './hooks/useOffers';
+export { useOffers }            from './hooks/useOffers';
+export { useOfferDetail }       from './hooks/useOfferDetail';
+export { useOffersContext, OffersProvider } from './context/OffersContext';
 export { calculateTotals, calculateLineTotal, formatCurrency } from './utils/pricing';
-export { generateOfferNumber } from './utils/offerNumber';
+export { generateOfferNumber }  from './utils/offerNumber';
 export { canTransition, getAvailableTransitions } from './utils/stateMachine';

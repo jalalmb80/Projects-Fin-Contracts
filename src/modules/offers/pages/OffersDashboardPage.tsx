@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, TrendingUp, CheckCircle, Clock, XCircle } from 'lucide-react';
-import { useOffers } from '../hooks/useOffers';
+import { FileText, TrendingUp, CheckCircle, Clock } from 'lucide-react';
+import { useOffersContext } from '../context/OffersContext';
 import { OfferStatus, STATUS_LABELS } from '../types';
 import { formatCurrency } from '../utils/pricing';
 import WorkflowBadge from '../components/WorkflowBadge';
@@ -12,7 +12,7 @@ const STAT_STATUSES: OfferStatus[] = [
 ];
 
 export default function OffersDashboardPage() {
-  const { offers, loading } = useOffers();
+  const { offers, loading } = useOffersContext();
   const navigate = useNavigate();
 
   if (loading) {

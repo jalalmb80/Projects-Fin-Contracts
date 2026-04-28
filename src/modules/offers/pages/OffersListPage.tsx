@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
-import { useOffers } from '../hooks/useOffers';
+import { useOffersContext } from '../context/OffersContext';
 import { useSharedClients } from '../../../core/hooks/useSharedClients';
 import { usePlatform } from '../../../core/context/PlatformContext';
-import { Offer, OfferStatus, OfferLanguage, OfferCurrency } from '../types';
+import {
+  Offer, OfferStatus, OfferLanguage, OfferCurrency, WorkflowLogEntry,
+} from '../types';
 import OfferCard from '../components/OfferCard';
 import WorkflowBadge from '../components/WorkflowBadge';
 import { generateOfferNumber } from '../utils/offerNumber';
@@ -15,7 +17,7 @@ const FILTER_STATUSES: Array<OfferStatus | 'all'> = [
 ];
 
 export default function OffersListPage() {
-  const { offers, templates, loading, createOffer } = useOffers();
+  const { offers, templates, loading, createOffer } = useOffersContext();
   const { clients: sharedClients } = useSharedClients();
   const { user } = usePlatform();
   const navigate = useNavigate();
@@ -26,14 +28,14 @@ export default function OffersListPage() {
   const [toast,        setToast]        = useState<string | null>(null);
 
   // New offer form state
-  const [titleEn,   setTitleEn]   = useState('');
-  const [titleAr,   setTitleAr]   = useState('');
-  const [clientId,  setClientId]  = useState('');
-  const [language,  setLanguage]  = useState<OfferLanguage>('en');
-  const [currency,  setCurrency]  = useState<OfferCurrency>('SAR');
-  const [expiryDate,setExpiryDate]= useState('');
-  const [templateId,setTemplateId]= useState('');
-  const [creating,  setCreating]  = useState(false);
+  const [titleEn,    setTitleEn]    = useState('');
+  const [titleAr,    setTitleAr]    = useState('');
+  const [clientId,   setClientId]   = useState('');
+  const [language,   setLanguage]   = useState<OfferLanguage>('en');
+  const [currency,   setCurrency]   = useState<OfferCurrency>('SAR');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [templateId, setTemplateId] = useState('');
+  const [creating,   setCreating]   = useState(false);
 
   const filtered = offers.filter(o => {
     if (statusFilter !== 'all' && o.status !== statusFilter) return false;
@@ -71,19 +73,35 @@ export default function OffersListPage() {
           }))
         : [];
 
-      const now    = new Date().toISOString();
-      const offerId = crypto.randomUUID();
-      const offer: Offer = {
+      const now       = new Date().toISOString();
+      const offerId   = crypto.randomUUID();
+      // generateOfferNumber is now async — uses runTransaction for atomicity
+      const offerNumber = await generateOfferNumber();
+
+      const initialEntry: WorkflowLogEntry = {
+        id:                   crypto.randomUUID(),
+        actor_name:           user.displayName ?? user.email ?? '',
+        actor_email:          user.email ?? '',
+        from_status:          null,
+        to_status:            'draft',
+        reason:               '',
+        is_system_generated:  true,
+        created_at:           now,
+      };
+
+      // Offer document — no notes or workflow_log fields (subcollections now)
+      const offer: Omit<Offer, 'notes' | 'workflow_log'> = {
         id:                  offerId,
-        offer_number:        generateOfferNumber(),
+        offer_number:        offerNumber,
         title_en:            titleEn.trim(),
         title_ar:            titleAr.trim(),
         status:              'draft',
         language,
         client_id:           clientId,
-        client_name:         sharedClients.find(c => c.id === clientId)?.name_ar ||
-                             sharedClients.find(c => c.id === clientId)?.name_en ||
-                             clientId,
+        client_name:
+          sharedClients.find(c => c.id === clientId)?.name_ar ||
+          sharedClients.find(c => c.id === clientId)?.name_en ||
+          clientId,
         assigned_to:         [user.uid],
         template_id:         templateId,
         template_version:    selectedTemplate?.version ?? 1,
@@ -97,29 +115,19 @@ export default function OffersListPage() {
         total_value:         0,
         sections,
         line_items:          [],
-        notes:               [],
-        workflow_log:        [{
-          id:                  crypto.randomUUID(),
-          actor_name:          user.displayName ?? user.email ?? '',
-          actor_email:         user.email ?? '',
-          from_status:         null,
-          to_status:           'draft',
-          reason:              '',
-          is_system_generated: true,
-          created_at:          now,
-        } as any],
         tags:                [],
         created_by:          user.uid,
         created_at:          now,
         updated_at:          now,
       };
 
-      await createOffer(offer);
-      showToast(`Offer ${offer.offer_number} created`);
+      await createOffer(offer as Offer, initialEntry);
+      showToast(`Offer ${offerNumber} created`);
       setShowModal(false);
       resetForm();
       navigate(`/offers/builder/${offerId}`);
-    } catch {
+    } catch (err) {
+      console.error('[OffersListPage] create failed:', err);
       showToast('Failed to create offer');
     } finally {
       setCreating(false);
@@ -177,7 +185,7 @@ export default function OffersListPage() {
                   : 'bg-white border border-slate-200 text-slate-600 hover:border-violet-300'
               }`}
             >
-              {s === 'all' ? 'All' : s.replace(/_/g, ' ')}
+              {s === 'all' ? 'All' : (STATUS_LABELS[s as OfferStatus]?.en ?? s.replace(/_/g, ' '))}
             </button>
           ))}
         </div>
@@ -224,13 +232,13 @@ export default function OffersListPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1" dir="rtl">العنوان (AR)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1" dir="rtl">\u0627\u0644\u0639\u0646\u0648\u0627\u0646 (AR)</label>
                 <input
                   value={titleAr}
                   onChange={e => setTitleAr(e.target.value)}
                   dir="rtl"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                  placeholder="عنوان العرض"
+                  placeholder="\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0639\u0631\u0636"
                 />
               </div>
             </div>
@@ -274,7 +282,7 @@ export default function OffersListPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
                 >
                   <option value="en">English</option>
-                  <option value="ar">عربي</option>
+                  <option value="ar">\u0639\u0631\u0628\u064a</option>
                 </select>
               </div>
               <div>

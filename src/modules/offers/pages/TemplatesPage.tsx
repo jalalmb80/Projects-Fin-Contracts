@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Archive, Edit2, Check, X } from 'lucide-react';
-import { useOffers } from '../hooks/useOffers';
+import { Plus, Archive, X } from 'lucide-react';
+import { useOffersContext } from '../context/OffersContext';
 import { usePlatform } from '../../../core/context/PlatformContext';
 import {
   OfferTemplate, OfferTemplateSection, OfferLanguage,
@@ -8,7 +8,7 @@ import {
 } from '../types';
 
 export default function TemplatesPage() {
-  const { templates, createTemplate, updateTemplate, archiveTemplate } = useOffers();
+  const { templates, createTemplate, updateTemplate, archiveTemplate } = useOffersContext();
   const { user } = usePlatform();
 
   const [showModal,  setShowModal]  = useState(false);
@@ -157,7 +157,7 @@ export default function TemplatesPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1" dir="rtl">الاسم (AR)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1" dir="rtl">\u0627\u0644\u0627\u0633\u0645 (AR)</label>
                 <input
                   value={nameAr}
                   onChange={e => setNameAr(e.target.value)}
@@ -208,7 +208,7 @@ export default function TemplatesPage() {
                   {sections.map(sec => (
                     <div key={sec.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5">
                       <span className="text-xs text-slate-700">
-                        {sec.is_fixed ? '\uD83D\uDD12 ' : ''}{ sec.title_en}
+                        {sec.is_fixed ? '\uD83D\uDD12 ' : ''}{sec.title_en}
                       </span>
                       <button
                         onClick={() => removeSection(sec.id)}
