@@ -1,6 +1,6 @@
 # 08 — Known Issues & Remaining Work
 
-This document captures everything that is known to be incomplete, imperfect, or deferred. Updated as of 2026-04-19.
+This document captures everything that is known to be incomplete, imperfect, or deferred. Updated as of 2026-04-20.
 
 ---
 
@@ -73,6 +73,15 @@ The "تغيير الحالة" button in the WorkflowTimeline tab navigates the u
 
 ---
 
+### 8. KPI trend values on Dashboard are static
+
+**Severity:** Low (UX)  
+**File:** `src/modules/finance/pages/DashboardPage.tsx`
+
+The `trend` prop on KpiCard (e.g. `+12% vs last month`) is hardcoded. A future improvement would compute these by comparing the current month's total against the previous month using the same invoice-grouping logic already applied to the Revenue Trend chart.
+
+---
+
 ## Architectural debt
 
 ### A. CMS module lacks a shared context
@@ -117,3 +126,6 @@ The project has no unit, integration, or E2E tests. `npm run lint` runs `tsc --n
 - ✅ Dark mode toggle wired to `document.documentElement.classList`
 - ✅ Dead service files, ProtectedRoute, temp files deleted
 - ✅ **Contract workflow feature** — full audit trail (transitions + notes), workflow roles settings, timeline tab, ContractsList integration (2026-04-19)
+- ✅ **Dashboard enhanced** — real revenue trend, 6 KPI cards, time-aware greeting, overdue quick-link, tEnum status badges, bilingual pie legend (2026-04-20)
+- ✅ **ProjectListPage enhanced** — tEnum status/dropdown, end date column with overdue indicator, result count, budget overflow badge, summary footer (2026-04-20)
+- ✅ **ProjectDetailPage fully i18n** — tabs translated, all labels bilingual via t()/tEnum(), tab key system type-safe (2026-04-20)

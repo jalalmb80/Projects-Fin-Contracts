@@ -152,6 +152,46 @@ Established the modular platform shell:
 
 ---
 
+### `08ee6d1` — feat(finance): enhance dashboard, project list, and project detail tabs with full i18n *(2026-04-20)*
+
+**Files changed:** `DashboardPage.tsx`, `ProjectListPage.tsx`, `ProjectDetailPage.tsx`
+
+**DashboardPage:**
+- Expanded KPI grid from 4 cards to 6 (added Active Projects + Active Subscriptions)
+- Revenue Trend chart now computed from real AR invoice data (last 6 months grouped by `invoice.date`) — previously used 100% mocked static data
+- Greeting is now time-aware: صباح الخير / مساء الخير / مساء النور (Good morning / afternoon / evening)
+- Added overdue quick-link badge in header when overdueCount > 0
+- Status badges now use `tEnum()` — no more raw enum strings in Arabic mode
+- Invoice type column uses `tEnum()` on `invoice.type`
+- Recent invoices sorted by `updatedAt desc` (was slice order)
+- "View all" link to /finance/billing added
+- Pie chart legend bilingual via `t()`, with empty-state fallback when both values are 0
+- Removed unused `useState`, `ArrowUpRight`, `ArrowDownRight` imports
+
+**ProjectListPage:**
+- Status dropdown options now use `tEnum()` — Arabic labels in AR mode, English in EN mode
+- Status badges use `tEnum()`
+- Contract type column uses `tEnum()`
+- "Started" label uses `t()` (was hardcoded English)
+- Added End Date column with `AlertCircle` icon and rose color when project is overdue (endDate < today and status is not Completed/Cancelled)
+- Added result count bar when filter is active: "Showing X of Y"
+- Added `<tfoot>` summary showing count + active count
+- Budget Health bar: overflow indicator (AlertCircle icon) when budgetPct > 100
+- Improved visual styling: `slate` palette, `rounded-xl`, primary-600 button
+- Added `isPast`, `parseISO` from date-fns
+
+**ProjectDetailPage:**
+- Imported `useLang, t, tEnum` from LanguageContext; added `const { lang } = useLang()`
+- Tabs refactored: replaced `['Overview','Milestones','Budget','Documents'].map(tab => tab.toLowerCase())` with typed `TABS` constant `{ key, ar, en }[]` — tab keys are type-safe, labels bilingual via `t(ar, en, lang)`
+- All UI labels translated throughout: header fields (Client, Contract, Contract Value), all 4 tab contents (section headers, column headers, empty states), all modal titles and form field labels, all ConfirmDialog titles and messages
+- Status badges use `tEnum()` for project status, milestone status, and document status
+- Milestone status dropdown uses `tEnum()` in select options
+- "Project not found" state translated with icon
+- `Briefcase` icon added (was unused import, now used in not-found state)
+- Removed unused `Calendar`, `Clock`, `AlertCircle` from imports — replaced by specific used icons
+
+---
+
 ## Source project lineage
 
 This project was built by merging two standalone apps:

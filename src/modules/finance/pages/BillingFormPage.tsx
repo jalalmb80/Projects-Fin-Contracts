@@ -110,7 +110,7 @@ export default function BillingFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSubmitting(true);
-    try { await addBillingDocument(formData); navigate('/billing'); }
+    try { await addBillingDocument(formData); navigate('/finance/billing'); }
     catch (error) { console.error('Error creating document:', error); }
     finally { setIsSubmitting(false); }
   };
@@ -126,7 +126,7 @@ export default function BillingFormPage() {
     <div className="space-y-6 max-w-5xl mx-auto" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/billing')} className="text-gray-400 hover:text-gray-500">
+          <button onClick={() => navigate('/finance/billing')} className="text-gray-400 hover:text-gray-500">
             <ChevronLeft className="h-6 w-6" />
           </button>
           <h1 className="text-2xl font-bold text-gray-900">{t('مستند فوترة جديد', 'New Billing Document', lang)}</h1>
@@ -262,7 +262,7 @@ export default function BillingFormPage() {
 
         {/* Footer */}
         <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
-          <button type="button" onClick={() => navigate('/billing')} className={btnSec}>{t('إلغاء', 'Cancel', lang)}</button>
+          <button type="button" onClick={() => navigate('/finance/billing')} className={btnSec}>{t('إلغاء', 'Cancel', lang)}</button>
           <button type="submit" disabled={isSubmitting} className={btnPri}>
             <Save className="h-5 w-5 ml-2" />
             {isSubmitting ? t('جارٍ الحفظ...', 'Saving...', lang) : t('حفظ كمسودة', 'Save as Draft', lang)}

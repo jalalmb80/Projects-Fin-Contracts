@@ -1,6 +1,6 @@
 import {
   collection, onSnapshot, query, orderBy,
-  doc, setDoc, updateDoc, getDoc,
+  doc, setDoc, updateDoc, arrayUnion,
 } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
 import {
@@ -31,16 +31,21 @@ export async function updateOffer(id: string, data: Partial<Offer>): Promise<voi
   } as any);
 }
 
+// Uses arrayUnion instead of the previous getDoc + read-then-write pattern.
+// The old code was vulnerable to lost updates when two workflow events or
+// two notes were added concurrently. arrayUnion is atomic on the server.
+//
+// NOTE: the previous implementation prepended entries to workflow_log so the
+// newest was at index 0. arrayUnion cannot guarantee a specific position;
+// it appends. Consumers that render workflow_log should sort by created_at
+// descending at read time instead of relying on stored order.
 export async function addWorkflowLogEntry(
   offerId: string,
   entry: WorkflowLogEntry,
   newStatus?: OfferStatus,
 ): Promise<void> {
-  const snap = await getDoc(doc(db, 'offers', offerId));
-  const offer = snap.data() as Offer | undefined;
-  const existing = offer?.workflow_log ?? [];
-  const patch: Partial<Offer> = {
-    workflow_log: [entry, ...existing],
+  const patch: Record<string, unknown> = {
+    workflow_log: arrayUnion(entry),
     updated_at: new Date().toISOString(),
   };
   if (newStatus !== undefined) patch.status = newStatus;
@@ -51,11 +56,8 @@ export async function addNote(
   offerId: string,
   note: OfferNote,
 ): Promise<void> {
-  const snap = await getDoc(doc(db, 'offers', offerId));
-  const offer = snap.data() as Offer | undefined;
-  const existing = offer?.notes ?? [];
   await updateDoc(doc(db, 'offers', offerId), {
-    notes: [...existing, note],
+    notes: arrayUnion(note),
     updated_at: new Date().toISOString(),
   } as any);
 }
