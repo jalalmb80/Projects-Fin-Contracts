@@ -1,6 +1,6 @@
 # 08 — Known Issues & Remaining Work
 
-This document captures everything that is known to be incomplete, imperfect, or deferred. Updated as of 2026-04-28 (Phase 1).
+This document captures everything that is known to be incomplete, imperfect, or deferred. Updated as of 2026-04-28 (Phase 2).
 
 ---
 
@@ -11,9 +11,9 @@ This document captures everything that is known to be incomplete, imperfect, or 
 **Severity:** Medium (cost / performance)  
 **File:** `src/modules/cms/hooks/useContracts.ts`
 
-The hook is called independently by each CMS page that mounts. If two CMS pages are rendered simultaneously, duplicate `onSnapshot` listeners open. This doubles read costs.
+The hook is called independently by each CMS page that mounts, opening duplicate `onSnapshot` listeners.
 
-**Fix:** Lift `useContracts` into a `CMSProvider` context (similar to AppContext for Finance, and now OffersProvider for Offers) and call it once at the `CMSLayout` level.
+**Fix:** Lift `useContracts` into a `CMSProvider` context wrapping `CMSLayout` — matching the Finance and Offers patterns.
 
 ---
 
@@ -22,7 +22,7 @@ The hook is called independently by each CMS page that mounts. If two CMS pages 
 **Severity:** Low  
 **File:** `src/modules/finance/components/Layout.tsx`
 
-The toggle correctly sets the `dark` class on `document.documentElement`. However, `dark:` variant styles are not defined across Finance components — the toggle works mechanically but has no visual effect.
+Toggle sets `dark` class on `document.documentElement` but Finance components have no `dark:` variants.
 
 ---
 
@@ -31,120 +31,101 @@ The toggle correctly sets the `dark` class on `document.documentElement`. Howeve
 **Severity:** Low  
 **File:** `src/modules/cms/services/googleDrive.ts`
 
-The Google Drive OAuth flow is implemented and the upload button is wired in the contract Preview tab. However, attachments uploaded via the Attachments tab are not synced to Drive.
+OAuth flow and contract preview upload work; Attachments tab files are not synced.
 
 ---
 
 ### 4. BillingDetailPage Edit button is non-functional
 
 **Severity:** Medium  
-**File:** `src/modules/finance/pages/BillingDetailPage.tsx`
-
-The Edit button on draft invoices renders but has no `onClick` handler and no route.
+**File:** `src/modules/finance/pages/BillingDetailPage.tsx`  
+Edit button on draft invoices has no `onClick` handler and no route.
 
 ---
 
 ### 5. Subscription `billingInterval` field unused
 
 **Severity:** Low  
-**File:** `src/modules/finance/types.ts`
-
-`Subscription.billingInterval` exists in the type but is not consumed by `runBillingJob`. Intended to support `BillingCycle.Custom` intervals — not yet implemented.
+`Subscription.billingInterval` not consumed by `runBillingJob`.
 
 ---
 
 ### 6. Payment allocation flow is simplified
 
 **Severity:** Medium (correctness)  
-**File:** `src/modules/finance/pages/BillingDetailPage.tsx`
-
-"Record Payment" creates a payment and updates balance directly, bypassing `allocatePayment()`. Payments recorded this way won't appear in `payment.allocations[]`.
+"Record Payment" bypasses `allocatePayment()`; payments won't appear in `allocations[]`.
 
 ---
 
-### 7. Workflow tab "تغيير الحالة" button navigates to Metadata tab
+### 7. Workflow tab "تغيير الحالة" navigates to Metadata tab
 
 **Severity:** Low (UX)  
-**File:** `src/modules/cms/components/ContractEditor.tsx`
-
-The "تغيير الحالة" button in the WorkflowTimeline tab navigates the user to the Metadata tab. A future improvement would open `WorkflowTransitionModal` directly from the workflow tab with a built-in status-picker step.
+Should open `WorkflowTransitionModal` directly from the workflow tab.
 
 ---
 
 ### 8. KPI trend values on Dashboard are static
 
 **Severity:** Low (UX)  
-**File:** `src/modules/finance/pages/DashboardPage.tsx`
-
-The `trend` prop on KpiCard (e.g. `+12% vs last month`) is hardcoded. A future improvement would compute these by comparing the current month's total against the previous month.
+`trend` prop on KpiCard is hardcoded. Should compare current vs previous month.
 
 ---
 
 ### 10. Offers: `expired` status has no inbound transition
 
 **Severity:** Low (arch debt)  
-**File:** `src/modules/offers/types.ts`
-
-`expired` is defined in `OfferStatus` and `STATUS_LABELS` but no transition leads into it via `ALLOWED_TRANSITIONS`. It is intended to be set by a scheduled Cloud Function that checks `expiry_date < today`. Until that function exists, `expired` is unreachable through the UI.
+Intended for a scheduled Cloud Function checking `expiry_date < today`.
 
 ---
 
 ### 11. Offers: `OFFER_WON` event has no subscriber
 
 **Severity:** Low (arch debt)  
-**File:** `src/core/events/platformBus.ts`
-
-`platformBus.emit(PLATFORM_EVENTS.OFFER_WON, ...)` fires when an offer is marked Won. No listener is registered in CMS or Finance yet. Phase 3 will add a CMS listener that opens a "Create Contract from Offer" modal and pre-fills `linked_contract_id`.
+Phase 3 will add CMS listener → `CreateContractFromOfferModal` with `linked_contract_id` pre-fill.
 
 ---
 
 ### 12. GEMINI_API_KEY exposed in client bundle
 
 **Severity:** Crash-class security issue  
-**File:** `vite.config.ts`
+**File:** `vite.config.ts`  
+`define: { 'process.env.GEMINI_API_KEY': ... }` injects the key into the production bundle.
 
-`define: { 'process.env.GEMINI_API_KEY': ... }` injects the key directly into the production bundle regardless of `VITE_` prefix convention. If a real Gemini API key is present in `.env.local`, it is visible in built JavaScript.
-
-**Fix:** Remove the `define` block and rename to `VITE_GEMINI_API_KEY` if client-side access is actually needed, OR move all Gemini calls to a server function.
+**Fix:** Remove the `define` block. Rename to `VITE_GEMINI_API_KEY` if client-side use is needed, OR move calls to a server function.
 
 ---
 
 ### 13. Firestore rules: no field-level restrictions
 
 **Severity:** Medium (security)  
-**File:** `firestore.rules`
+All collections allow full read/write to any authenticated user. `appSettings/invoiceCounter` and `appSettings/offerCounter` can be overwritten by any user.
 
-All collections allow full read/write to any authenticated user. `appSettings/invoiceCounter` (and `appSettings/offerCounter`) can be overwritten by any user, bypassing `runTransaction` safety. No RBAC exists.
-
-**Fix:** For counters, add a `request.resource.data.keys().hasOnly(['lastSequence'])` constraint. Full RBAC requires Firebase Custom Claims.
+**Fix:** Add `request.resource.data.keys().hasOnly(['lastSequence'])` constraint for counters. Full RBAC requires Firebase Custom Claims.
 
 ---
 
 ## Architectural debt
 
 ### A. CMS module lacks a shared context
-
-Each CMS page opens its own Firestore listeners. A `CMSProvider` wrapping CMS routes would deduplicate subscriptions — matching the Finance and Offers patterns. (Offers fixed this in Phase 0.)
+Each CMS page opens its own Firestore listeners. Requires a `CMSProvider` — same pattern as Finance and Offers.
 
 ### B. CMS and Finance use separate project registries
-
-Finance projects and CMS projects represent similar real-world entities but use different schemas and collections. The `platformBus` integration is a cross-module workaround.
+`platformBus` contract-signed integration is a workaround for the schema divergence.
 
 ### C. No role-based access control
-
-All authenticated users have full read/write access. Requires a `role` field per user in Firestore or Firebase Custom Claims.
+All authenticated users have full read/write. Requires Firebase Custom Claims.
 
 ### D. No automated tests
-
-The project has no unit, integration, or E2E tests. `npm run lint` runs `tsc --noEmit` only.
+`npm run lint` runs `tsc --noEmit` only.
 
 ### E. Offers status labels not settings-driven
+Hardcoded in `types.ts`. Phase 2+ will add `offer_settings/general.offer_statuses[]`.
 
-Unlike CMS contract statuses (configurable via `cms_settings`), offer statuses are hardcoded in `types.ts`. Phase 2+ will add `offer_settings/general.offer_statuses[]`.
+### F. PDF export engine is duplicated across CMS and Offers
+`cms/utils/exportPdf.ts` and `offers/utils/exportPdf.ts` are identical. Phase 4 will extract to `src/core/utils/exportPdf.ts` and update both importers.
 
-### F. Offers: no PDF export, version history, or appendices
-
-All three are Phase 2–3 items tracked in `docs/09-offers-module.md`.
+### G. Offers: no version history
+Phase 3 item — `OfferVersion` snapshots on content save, mirroring CMS `ContractVersion`.
 
 ---
 
@@ -152,23 +133,23 @@ All three are Phase 2–3 items tracked in `docs/09-offers-module.md`.
 
 - ✅ `ToastProvider` missing → crash on Subscriptions/Products/ProjectDetail
 - ✅ AppContext notification system (wrote to state, never rendered)
-- ✅ `useContracts` opened listeners before auth was confirmed
+- ✅ `useContracts` opened listeners before auth confirmed
 - ✅ `CMSDashboard` used `c.created_at` (non-existent field)
 - ✅ `PlatformContext` opened duplicate Firestore listeners
-- ✅ `ContractsPage` called `useContracts()` twice; `setContracts`/`setTemplates` were no-ops
+- ✅ `ContractsPage` called `useContracts()` twice
 - ✅ `CMSClientsPage` and `CMSProjectsPage` called Firestore directly
 - ✅ Invoice number race condition (fixed with `runTransaction`)
-- ✅ `LoginPage` was imported from Finance module by AppShell
-- ✅ `CounterpartiesPage` / forms used service files instead of AppContext
-- ✅ `useContracts` snapshot mapping missing `id: d.id` spread
+- ✅ `LoginPage` imported from Finance by AppShell
+- ✅ `CounterpartiesPage` used service files instead of AppContext
+- ✅ `useContracts` snapshot missing `id: d.id` spread
 - ✅ `cms_projects` / `cms_settings` missing from Firestore rules
-- ✅ AppContext `getDocs` missing `id: d.id` spread
+- ✅ AppContext `getDocs` missing `id: d.id`
 - ✅ `SubscriptionForm` hardcoded `legalEntityId: 'default'`
 - ✅ `CMSProjectsPage` used English status values
-- ✅ `CMSClientsPage` form fields didn't match `Client` type
+- ✅ `CMSClientsPage` fields didn't match `Client` type
 - ✅ `alert()` calls replaced with toast / inline feedback
-- ✅ **Contract workflow feature** — full audit trail, roles config, timeline tab, ContractsList integration (2026-04-19)
-- ✅ **Dashboard enhanced** — real revenue trend, 6 KPI cards, bilingual, tEnum badges (2026-04-20)
-- ✅ **ProjectListPage / ProjectDetailPage** — end-date column, budget overflow, full i18n (2026-04-20)
-- ✅ **Offers Phase 0** — OffersProvider, atomic offer numbering, workflow_log + notes subcollections, firestore.rules updated, docs/09-offers-module.md created (2026-04-28)
-- ✅ **Offers Phase 1** — WorkflowAssignee on WorkflowLogEntry, OfferTransitionModal, OfferNoteModal, OffersSettingsContext (configurable workflow roles from offer_settings/general), WorkflowPanel simplified to action buttons + timeline, system note batched atomically with log entry (fixes #9), offer_settings Firestore rule added (2026-04-28)
+- ✅ **Contract workflow** — audit trail, roles config, timeline, ContractsList integration (2026-04-19)
+- ✅ **Finance i18n** — Dashboard real data, ProjectListPage, ProjectDetailPage fully bilingual (2026-04-20)
+- ✅ **Offers Phase 0** — OffersProvider, atomic numbering, subcollections, rules (2026-04-28)
+- ✅ **Offers Phase 1** — WorkflowAssignee, OfferTransitionModal, OfferNoteModal, OffersSettingsContext, system note batched (2026-04-28)
+- ✅ **Offers Phase 2** — OfferPreviewPortal (bilingual, section-type-aware), exportOfferToPdf (html2canvas+jsPDF with oklch resolver), Preview + PDF buttons in OfferBuilderPage top bar (2026-04-28)

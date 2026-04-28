@@ -20,152 +20,149 @@ Established the modular platform shell:
 - Created `AppShell`, `ModuleSwitcher`, `PlatformContext`, `platformBus`
 - Registered Finance and CMS modules in `registry.tsx`
 - Set up Vite + React + TypeScript + Tailwind configuration
-- Both modules were lazy-loaded via `React.lazy()`
 
-**Context:** This was the first integration step merging the two source projects (FinArchiTec2.1 and contracts-main) into one app. The module registry pattern was chosen so new modules can be added by registering a single entry — no changes to AppShell required.
+**Context:** First integration step merging FinArchiTec2.1 and contracts-main. Module registry pattern means new modules need only a single registry entry.
 
 ---
 
 ### `a5520bf` — Integrate Firebase authentication and Firestore *(2026-04-07)*
 
 - Wired Firebase Auth into `PlatformContext`
-- Created `useContracts` hook to replace the CMS module's in-memory mock data with real Firestore listeners
-- Updated CMS pages to use the hook
+- Created `useContracts` hook replacing in-memory CMS mock data with Firestore listeners
 - Added `.env.example`
 
 ---
 
 ### `0ec13f8` — Integrate platform context and improve UI feedback *(2026-04-07)*
 
-- Added auth guard to `useContracts`
-- Added `ToastProvider` to Finance routes
-- Fixed `CMSDashboardPage` sort
+- Auth guard for `useContracts`; `ToastProvider` added to Finance routes; CMSDashboard sort fixed.
 
 ---
 
 ### `16cb78a` — feat(finance): Improve app context and routing *(2026-04-08)*
 
-- Fixed provider order: `ToastProvider` wraps `AppProvider`
-- Replaced all 57 `console.log` calls in AppContext with `addToast()`
-- Fixed `CMSDashboardPage` to use `useContracts().clients`
-- Deleted `temp_billing.tsx`
+- `ToastProvider` wraps `AppProvider` (correct order); 57 `console.log` → `addToast()`.
 
 ---
 
 ### `1ef5485` — Centralize data fetching with AppContext *(2026-04-08)*
 
-- Added `cms_projects` collection to `useContracts` hook
-- Added Firestore rules for `cms_projects`
-- Refactored Finance pages to use `useApp()` instead of service files
-- Deleted all 5 unused service files
+- `cms_projects` collection added to `useContracts`; Finance pages use `useApp()`; dead service files deleted.
 
 ---
 
 ### `0fcc5b4` — Add error handling to cms hooks and currency toggle *(2026-04-08)*
 
-- Added error callbacks to all `onSnapshot` calls
-- Wired currency toggle and dark mode toggle
+- Error callbacks on all `onSnapshot` calls; currency + dark mode toggles wired.
 
 ---
 
 ### `3b95af8` — Add legal entity selection to subscription form *(2026-04-08)*
 
-- `SubscriptionForm` populates Legal Entity dropdown from `useApp().legalEntities`
-- Fixed AppContext `getDocs` id-spread bug
-- Added Firestore rule for `cms_settings`
+- `SubscriptionForm` → `useApp().legalEntities`; AppContext getDocs id-spread fixed; `cms_settings` rule added.
 
 ---
 
 ### `f758276` — fix: correct CMS data types, align Client form, replace alert() *(2026-04-08)*
 
-- `CMSProjectsPage` status values corrected to Arabic `ProjectStatus` type
-- `CMSClientsPage` form fields aligned to `Client` type
-- `CMSSettingsPage` and `BillingDetailPage` replaced `alert()` with inline feedback
+- CMS status enums, Client type alignment, `alert()` → inline feedback.
 
 ---
 
-### `ce4faf0` — feat(cms/workflow): Phase 1+2 — types, settings context, useContracts hook *(2026-04-19)*
+### `ce4faf0` — feat(cms/workflow): Phase 1+2 *(2026-04-19)*
 
-- Added `WorkflowAssignee` and `WorkflowEvent` interfaces to CMS `types.ts`
-- `SettingsContext` loads `workflow_roles` from Firestore `cms_settings/config`
-- `useContracts` gains `addWorkflowEvent()` — atomic `updateDoc` prepending event + updating status
+- `WorkflowAssignee` + `WorkflowEvent` types in CMS; `SettingsContext` loads workflow roles; `useContracts.addWorkflowEvent` atomic.
 
 ---
 
-### `d8dbb84` — feat(cms/workflow): Phase 3 — WorkflowTransitionModal + WorkflowNoteModal *(2026-04-19)*
+### `d8dbb84` — feat(cms/workflow): Phase 3 *(2026-04-19)*
 
-- CMS `WorkflowTransitionModal`: portal modal collecting assignee role+name+optional note
-- CMS `WorkflowNoteModal`: portal modal for note-only events (status unchanged)
-
----
-
-### `8c4df02` — feat(cms/workflow): Phase 4 — WorkflowTimeline component *(2026-04-19)*
-
-- Current-status banner + action buttons + EventCard timeline (newest-first)
+- CMS `WorkflowTransitionModal` + `WorkflowNoteModal` portal components.
 
 ---
 
-### `5da761f` — feat(cms/workflow): Phase 5 — wire ContractEditor *(2026-04-19)*
+### `8c4df02` — feat(cms/workflow): Phase 4 *(2026-04-19)*
 
-- Added `سجل الإجراءات` tab; status select goes through WorkflowTransitionModal
-- `handleTransitionConfirm` → `addWorkflowEvent()` → win-status side effects + platformBus
-
----
-
-### `ce7c181` — feat(cms/workflow): Phase 6+7 — ContractsList + CMSSettingsPage *(2026-04-19)*
-
-- ContractsList: status change via `WorkflowTransitionModal`
-- CMSSettingsPage: workflow roles section with inline edit/delete
+- CMS `WorkflowTimeline` component.
 
 ---
 
-### `08ee6d1` — feat(finance): enhance dashboard, project list, and project detail tabs with full i18n *(2026-04-20)*
+### `5da761f` — feat(cms/workflow): Phase 5 *(2026-04-19)*
 
-- Dashboard: real revenue trend, 6 KPI cards, time-aware greeting, overdue quick-link
-- ProjectListPage: end-date column, result count, budget overflow, `tEnum()` labels
-- ProjectDetailPage: all tabs and labels fully bilingual via `t()` / `tEnum()`
+- `ContractEditor` wired: status select → `WorkflowTransitionModal` → `addWorkflowEvent` → win side effects.
+
+---
+
+### `ce7c181` — feat(cms/workflow): Phase 6+7 *(2026-04-19)*
+
+- `ContractsList` status change via modal; `CMSSettingsPage` workflow roles section.
+
+---
+
+### `08ee6d1` — feat(finance): enhance dashboard, project list, project detail with full i18n *(2026-04-20)*
+
+- Dashboard real revenue trend, 6 KPI cards, time-aware greeting; ProjectListPage end-date + budget overflow; ProjectDetailPage full bilingual.
 
 ---
 
 ### `db115c7` — feat(offers): Phase 0 — OffersProvider, atomic offer numbering, subcollection audit trail *(2026-04-28)*
 
-**Files created:**
-- `src/modules/offers/context/OffersContext.tsx` — OffersProvider + useOffersContext()
-- `src/modules/offers/hooks/useOfferDetail.ts` — per-offer subcollection subscriptions
-- `docs/09-offers-module.md` — full module documentation
+**Motivation:** Three architectural problems — duplicate listeners, Math.random collision risk, 1 MB doc-size risk.
+
+**Files created:** `context/OffersContext.tsx`, `hooks/useOfferDetail.ts`, `docs/09-offers-module.md`
 
 **Key changes:**
-- `useOffers()` runs once at OffersProvider level; pages call `useOffersContext()`
-- `generateOfferNumber()` rewritten as async `runTransaction` on `appSettings/offerCounter`
-- `workflow_log` moved to `offers/{id}/workflow_log` subcollection (immutable, create-only)
-- `notes` moved to `offers/{id}/notes` subcollection
+- `OffersProvider` wraps `OffersLayout`; pages call `useOffersContext()`
+- `generateOfferNumber()` → async `runTransaction` on `appSettings/offerCounter`
+- `workflow_log` and `notes` moved to subcollections
 - `addWorkflowLogEntry` uses `writeBatch` (status + log entry atomic)
-- `WorkflowLogEntry.is_system_generated?: boolean` added (fixes silent `as any` cast)
-- `Offer.notes` and `Offer.workflow_log` marked `@deprecated`
-- `firestore.rules`: subcollection rules nested in `/offers/{offerId}`
+- `WorkflowLogEntry.is_system_generated?: boolean` typed
+- Firestore rules: subcollection rules nested in `/offers/{offerId}`
 
 ---
 
-### Phase 1 — feat(offers): WorkflowAssignee, OfferTransitionModal, OfferNoteModal, OffersSettingsContext *(2026-04-28)*
+### `70dc56a` — feat(offers): Phase 1 — WorkflowAssignee, OfferTransitionModal, OfferNoteModal, OffersSettingsContext *(2026-04-28)*
 
-**Motivation:** Phase 0 moved the data to subcollections but the workflow UX remained an inline panel form. Phase 1 brings the offers workflow to parity with the CMS contracts workflow.
+**Motivation:** Phase 0 fixed data; Phase 1 brings UX to CMS-workflow parity.
 
 **Files created:**
-- `src/modules/offers/context/OffersSettingsContext.tsx` — `OffersSettingsProvider` + `useOffersSettings()`; loads `offer_settings/general` via `getDoc`; exposes `offerWorkflowRoles[]` + `updateOfferWorkflowRoles()`
-- `src/modules/offers/components/OfferTransitionModal.tsx` — portal modal; collects responsible person (role from settings, name required) + optional reason; produces `WorkflowLogEntry { type: 'transition' }`; pure UI, mirrors CMS `WorkflowTransitionModal`
-- `src/modules/offers/components/OfferNoteModal.tsx` — portal modal; note body required; produces `WorkflowLogEntry { type: 'note', from_status === to_status }`; mirrors CMS `WorkflowNoteModal`
+- `context/OffersSettingsContext.tsx` — `OffersSettingsProvider` + `useOffersSettings()`
+- `components/OfferTransitionModal.tsx` — portal modal for status transitions
+- `components/OfferNoteModal.tsx` — portal modal for audit notes
+
+**Key changes:**
+- `WorkflowLogEntry` gains `type: 'transition' | 'note'` + `assignee: WorkflowAssignee`
+- `addWorkflowLogEntry` accepts `systemNote?` — all 3 writes in one `writeBatch` (fixes #9)
+- `WorkflowPanel` simplified to buttons + timeline; inline form removed
+- Firestore rules: `offer_settings` collection added
+
+---
+
+### Phase 2 — feat(offers): OfferPreviewPortal + exportOfferToPdf *(2026-04-28)*
+
+**Motivation:** Offers had no way to preview or export to PDF. CMS contracts have had this since the initial build; parity requires it for any offer sent to a client.
+
+**Files created:**
+- `src/modules/offers/utils/exportPdf.ts` — full html2canvas + jsPDF pipeline with oklch→rgb color resolver. Identical engine to `cms/utils/exportPdf.ts`, kept module-local to preserve module independence. Phase 4 may extract shared engine to `src/core/utils/exportPdf.ts`.
+- `src/modules/offers/components/OfferPreviewPortal.tsx` — bilingual, section-type-aware preview portal.
 
 **Files modified:**
-- `src/modules/offers/types.ts` — Added `WorkflowAssignee { role, name }` interface; `WorkflowLogEntry` gains `type: 'transition' | 'note'` and `assignee: WorkflowAssignee`; added `DEFAULT_OFFER_WORKFLOW_ROLES` constant
-- `src/modules/offers/services/offerService.ts` — `addWorkflowLogEntry` gains optional `systemNote?: OfferNote` parameter; all three writes (log entry + status update + system note) now in one `writeBatch` (fixes issue #9)
-- `src/modules/offers/components/OffersLayout.tsx` — wraps with `OffersSettingsProvider` inside `OffersProvider`
-- `src/modules/offers/components/WorkflowPanel.tsx` — inline form replaced by "Change Status" transition buttons + "Add Note" button; props changed to `onTransitionRequest(toStatus)` + `onNoteRequest()`; timeline displays `assignee.role / assignee.name` and colors `type === 'note'` entries in blue
-- `src/modules/offers/pages/OfferBuilderPage.tsx` — modal state: `pendingTransitionTo: OfferStatus | null` + `showNoteModal: boolean`; `handleTransitionConfirm(entry)` builds system note and calls atomic `addWorkflowLogEntry(offerId, entry, toStatus, systemNote)`; `handleNoteConfirm(entry)` calls `addWorkflowLogEntry(offerId, entry)` only; Workflow tab badge now shows `workflowLog.length`
-- `firestore.rules` — `offer_settings/{document=**}` collection added (authenticated read/write)
-- `src/modules/offers/index.ts` — exports `WorkflowAssignee`, `DEFAULT_OFFER_WORKFLOW_ROLES`, `OffersSettingsProvider`, `useOffersSettings`, `REASON_REQUIRED`
+- `src/modules/offers/pages/OfferBuilderPage.tsx` — Preview button (opens full modal) + PDF button (direct download). `previewMode: 'preview' | 'download' | null` state; renders `OfferPreviewPortal`.
+- `src/modules/offers/index.ts` — exports `exportOfferToPdf`, `generateOfferPdfBlob`, `OfferPreviewPortal`.
 
 **Design decisions:**
-- `OffersSettingsProvider` wraps inside `OffersProvider` in `OffersLayout` — both in scope for all offer pages and modals
-- Role list defaults to English (`DEFAULT_OFFER_WORKFLOW_ROLES`) since Offers is an EN-first module; stored in `offer_settings/general.workflow_roles` and user-editable (UI for editing to be added in a future settings page)
-- `WorkflowLogEntry.type === 'note'` entries appear in the WorkflowPanel timeline (audit trail) rather than the NotesPanel (user sticky notes) — same separation as CMS: workflow audit vs. conversation notes
-- Pre-Phase-1 `WorkflowLogEntry` records (missing `type` and `assignee`) are handled defensively in WorkflowPanel via optional chaining on `entry.assignee?.name`
+
+*Two-mode portal (preview vs download):* Same pattern as `ContractPreviewPortal`. In `download` mode the portal renders off-screen, auto-triggers export after `2 rAF + 300 ms`, then calls `onClose`. In `preview` mode it opens a full-screen modal with Download and Print actions.
+
+*Section-type-aware rendering:*
+- `cover_page` → styled metadata header (offer number, client, expiry, status badge)
+- `pricing_table` → live `offer.line_items` table with subtotal / discount / VAT / total rows
+- `payment_schedule` → three KPI cards (subtotal, VAT, total) + section content
+- `signature_block` → two-column signature area (Supplier / Client)
+- All others → `<h2>` title + `dangerouslySetInnerHTML` for rich-text content
+
+*Bilingual:* `offer.language` drives `dir`, section title field (`title_en` vs `title_ar`), Arabic font stack (`Tajawal`) vs system font, and all UI strings in the document body. The toolbar is always in English (same as the builder UI).
+
+*Automatic document header:* When no `cover_page` section exists, a compact metadata header renders above the section list. When a `cover_page` section is present, it provides the full cover and the auto-header is suppressed.
+
+*`dangerouslySetInnerHTML` rationale:* Section content is authored by authenticated users within their own session. No third-party or user-submitted HTML is ever rendered. Risk is equivalent to a rich-text contract article in the CMS module.
