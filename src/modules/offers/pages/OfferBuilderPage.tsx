@@ -7,30 +7,34 @@ import { usePlatform } from '../../../core/context/PlatformContext';
 import { platformBus, PLATFORM_EVENTS } from '../../../core/events/platformBus';
 import {
   Offer, OfferSection, SectionType, OfferStatus,
-  WorkflowLogEntry, OfferNote, LineItem, SECTION_TYPE_LABELS,
+  WorkflowLogEntry, OfferNote, LineItem,
+  SECTION_TYPE_LABELS, STATUS_LABELS,
 } from '../types';
 import SectionNavigator from '../components/SectionNavigator';
 import SectionEditor from '../components/SectionEditor';
 import WorkflowPanel from '../components/WorkflowPanel';
 import NotesPanel from '../components/NotesPanel';
 import WorkflowBadge from '../components/WorkflowBadge';
+import OfferTransitionModal from '../components/OfferTransitionModal';
+import OfferNoteModal from '../components/OfferNoteModal';
 
 type RightTab = 'workflow' | 'notes';
 
-const READ_ONLY_STATUSES: OfferStatus[] = ['approved', 'sent_to_client', 'won', 'lost', 'archived'];
+const READ_ONLY_STATUSES: OfferStatus[] = [
+  'approved', 'sent_to_client', 'won', 'lost', 'archived',
+];
 
 export default function OfferBuilderPage() {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = usePlatform();
 
-  // Top-level offer data from OffersProvider (single listener, no duplication)
   const {
-    offers, updateOffer, addWorkflowLogEntry,
-    addNote, updateSections, updateLineItems,
+    offers, addWorkflowLogEntry, addNote,
+    updateSections, updateLineItems,
   } = useOffersContext();
 
-  // Per-offer subcollection data (workflow_log + notes)
+  // Per-offer subcollection subscriptions (workflow_log + notes)
   const { workflowLog, notes } = useOfferDetail(id);
 
   const offer = offers.find(o => o.id === id);
@@ -39,7 +43,11 @@ export default function OfferBuilderPage() {
   const [rightTab,        setRightTab]        = useState<RightTab>('workflow');
   const [toast,           setToast]           = useState<string | null>(null);
 
-  // Auto-select first section
+  // Modal state
+  const [pendingTransitionTo, setPendingTransitionTo] = useState<OfferStatus | null>(null);
+  const [showNoteModal,       setShowNoteModal]       = useState(false);
+
+  // Auto-select first section on load
   useEffect(() => {
     if (offer && !activeSectionId && offer.sections.length > 0) {
       const sorted = [...offer.sections].sort((a, b) => a.position - b.position);
@@ -57,7 +65,10 @@ export default function OfferBuilderPage() {
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
           <p className="text-slate-400 text-sm">Offer not found</p>
-          <button onClick={() => navigate('/offers/list')} className="mt-2 text-xs text-violet-600 hover:underline">
+          <button
+            onClick={() => navigate('/offers/list')}
+            className="mt-2 text-xs text-violet-600 hover:underline"
+          >
             Back to list
           </button>
         </div>
@@ -65,12 +76,12 @@ export default function OfferBuilderPage() {
     );
   }
 
-  const readOnly  = READ_ONLY_STATUSES.includes(offer.status);
-  const dir       = offer.language === 'ar' ? 'rtl' : 'ltr';
-  const sorted    = [...offer.sections].sort((a, b) => a.position - b.position);
+  const readOnly      = READ_ONLY_STATUSES.includes(offer.status);
+  const dir           = offer.language === 'ar' ? 'rtl' : 'ltr';
+  const sorted        = [...offer.sections].sort((a, b) => a.position - b.position);
   const activeSection = sorted.find(s => s.id === activeSectionId) ?? null;
 
-  // ── Section mutations ───────────────────────────────────────────────────────
+  // ── Section mutations ──────────────────────────────────────────────────────
 
   async function handleAddSection(type: SectionType) {
     const label  = SECTION_TYPE_LABELS[type];
@@ -85,8 +96,7 @@ export default function OfferBuilderPage() {
       content:    '',
       is_visible: true,
     };
-    const next = [...offer.sections, newSec];
-    await updateSections(offer.id, next);
+    await updateSections(offer.id, [...offer.sections, newSec]);
     setActiveSectionId(newSec.id);
   }
 
@@ -95,20 +105,18 @@ export default function OfferBuilderPage() {
     if (sec?.is_fixed) return;
     const next = offer.sections.filter(s => s.id !== sectionId);
     await updateSections(offer.id, next);
-    if (activeSectionId === sectionId) {
-      setActiveSectionId(next[0]?.id ?? null);
-    }
+    if (activeSectionId === sectionId) setActiveSectionId(next[0]?.id ?? null);
   }
 
   function move(sectionId: string, direction: 1 | -1) {
-    const list = [...sorted];
-    const idx  = list.findIndex(s => s.id === sectionId);
+    const list   = [...sorted];
+    const idx    = list.findIndex(s => s.id === sectionId);
     if (idx === -1) return;
     const target = idx + direction;
     if (target < 0 || target >= list.length) return;
-    const aPos = list[idx].position;
-    const bPos = list[target].position;
-    const next = offer.sections.map(s => {
+    const aPos   = list[idx].position;
+    const bPos   = list[target].position;
+    const next   = offer.sections.map(s => {
       if (s.id === list[idx].id)    return { ...s, position: bPos };
       if (s.id === list[target].id) return { ...s, position: aPos };
       return s;
@@ -135,47 +143,48 @@ export default function OfferBuilderPage() {
   }
 
   async function handleSaveLineItems(
-    items: LineItem[],
+    items:       LineItem[],
     discountPct: number,
-    vatRate: number,
+    vatRate:     number,
   ) {
     await updateLineItems(offer.id, items, discountPct, vatRate);
     showToast('Pricing saved');
   }
 
-  // ── Workflow ────────────────────────────────────────────────────────────────
+  // ── Workflow — transition (via OfferTransitionModal) ───────────────────────
 
-  async function handleTransition(toStatus: OfferStatus, reason: string) {
+  /**
+   * handleTransitionConfirm
+   *
+   * Called by OfferTransitionModal.onConfirm with a fully-built WorkflowLogEntry.
+   * Builds the system OfferNote and calls addWorkflowLogEntry with it — both
+   * writes are now in the same writeBatch (Phase 1 fix for issue #9).
+   */
+  async function handleTransitionConfirm(entry: WorkflowLogEntry) {
     if (!user) return;
-    const entry: WorkflowLogEntry = {
-      id:          crypto.randomUUID(),
-      actor_name:  user.displayName ?? user.email ?? '',
-      actor_email: user.email ?? '',
-      from_status: offer.status,
-      to_status:   toStatus,
-      reason,
-      created_at:  new Date().toISOString(),
-    };
-    // addWorkflowLogEntry now uses writeBatch: status + subcollection entry are atomic
-    await addWorkflowLogEntry(offer.id, entry, toStatus);
 
-    // System note — written separately (Phase 1 will batch this with the log entry)
     const systemNote: OfferNote = {
       id:                  crypto.randomUUID(),
       author_name:         'System',
       author_email:        '',
       note_type:           'approval_decision',
       visibility:          'internal',
-      body:                `Status changed to "${toStatus.replace(/_/g, ' ')}"${reason ? `\nReason: ${reason}` : ''}`.trim(),
+      body:                [
+        `Status changed to "${STATUS_LABELS[entry.to_status]?.en ?? entry.to_status}"`,
+        entry.reason ? `Reason: ${entry.reason}` : '',
+        entry.assignee.name ? `Responsible: ${entry.assignee.role} / ${entry.assignee.name}` : '',
+      ].filter(Boolean).join('\n'),
       parent_note_id:      null,
       is_system_generated: true,
       is_pinned:           false,
-      created_at:          new Date().toISOString(),
+      created_at:          entry.created_at,
     };
-    await addNote(offer.id, systemNote);
 
-    // Emit platformBus event when offer is won
-    if (toStatus === 'won') {
+    // Atomic: log entry + status update + system note in one writeBatch
+    await addWorkflowLogEntry(offer.id, entry, entry.to_status, systemNote);
+
+    // Emit platformBus event on won
+    if (entry.to_status === 'won') {
       platformBus.emit(PLATFORM_EVENTS.OFFER_WON, {
         offerId:     offer.id,
         offerNumber: offer.offer_number,
@@ -184,8 +193,26 @@ export default function OfferBuilderPage() {
       });
     }
 
-    showToast(`Status updated to ${STATUS_LABELS[toStatus]?.en ?? toStatus}`);
+    setPendingTransitionTo(null);
+    showToast(`Status updated to ${STATUS_LABELS[entry.to_status]?.en ?? entry.to_status}`);
   }
+
+  // ── Workflow — note (via OfferNoteModal) ────────────────────────────────────
+
+  /**
+   * handleNoteConfirm
+   *
+   * Called by OfferNoteModal.onConfirm with a fully-built WorkflowLogEntry
+   * (type: 'note'). No status change — no systemNote needed.
+   */
+  async function handleNoteConfirm(entry: WorkflowLogEntry) {
+    // Just write to workflow_log subcollection + touch updated_at
+    await addWorkflowLogEntry(offer.id, entry);
+    setShowNoteModal(false);
+    showToast('Note added');
+  }
+
+  // ── NotesPanel notes (manual user notes, separate from workflow audit trail)
 
   async function handleAddNote(note: OfferNote) {
     await addNote(offer.id, note);
@@ -266,6 +293,11 @@ export default function OfferBuilderPage() {
               }`}
             >
               <GitBranch size={12} /> Workflow
+              {workflowLog.length > 0 && (
+                <span className="ml-0.5 bg-violet-100 text-violet-700 text-xs rounded-full px-1.5">
+                  {workflowLog.length}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setRightTab('notes')}
@@ -290,7 +322,10 @@ export default function OfferBuilderPage() {
               <WorkflowPanel
                 offer={offer}
                 workflowLog={workflowLog}
-                onTransition={handleTransition}
+                onTransitionRequest={toStatus => {
+                  if (!readOnly) setPendingTransitionTo(toStatus);
+                }}
+                onNoteRequest={() => setShowNoteModal(true)}
               />
             ) : (
               <NotesPanel
@@ -307,6 +342,25 @@ export default function OfferBuilderPage() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-lg z-50">
           {toast}
         </div>
+      )}
+
+      {/* ── Modals ──────────────────────────────────────────────────────── */}
+
+      {pendingTransitionTo && (
+        <OfferTransitionModal
+          fromStatus={offer.status}
+          toStatus={pendingTransitionTo}
+          onConfirm={handleTransitionConfirm}
+          onCancel={() => setPendingTransitionTo(null)}
+        />
+      )}
+
+      {showNoteModal && (
+        <OfferNoteModal
+          currentStatus={offer.status}
+          onConfirm={handleNoteConfirm}
+          onCancel={() => setShowNoteModal(false)}
+        />
       )}
     </div>
   );

@@ -16,30 +16,40 @@ The Offers module generates, manages, and tracks commercial proposals sent to cl
 
 ---
 
-## OffersProvider — the data layer
+## Provider architecture
 
-**File:** `src/modules/offers/context/OffersContext.tsx`
+Two providers wrap `OffersLayout`. Both are mounted once; all child pages consume via hooks.
 
-`OffersProvider` wraps `OffersLayout` and runs `useOffers()` exactly once, opening a single set of Firestore listeners regardless of how many pages are mounted. All pages call `useOffersContext()` — never `useOffers()` directly.
+```
+OffersProvider          (Firestore listeners: offers + offer_templates)
+  OffersSettingsProvider  (getDoc: offer_settings/general)
+    OffersLayoutInner     (sidebar + Outlet)
+```
 
-### What it manages
-
-| Collection | Firestore path | Order |
+| Provider | Hook | Source |
 |---|---|---|
-| offers | `offers` | `created_at` desc |
-| offer templates | `offer_templates` | `created_at` desc |
+| `OffersProvider` | `useOffersContext()` | `offers` + `offer_templates` onSnapshot |
+| `OffersSettingsProvider` | `useOffersSettings()` | `offer_settings/general` getDoc |
 
-### Key methods exposed via context
+### useOffersContext — what it exposes
 
 | Method | Purpose |
 |---|---|
-| `createOffer(offer, initialWorkflowEntry)` | Batch write: offer doc + first workflow_log subcollection entry, atomic |
+| `createOffer(offer, initialWorkflowEntry)` | Batch: offer doc + first workflow_log entry, atomic |
 | `updateOffer(id, data)` | Partial update on the offer document |
-| `addWorkflowLogEntry(offerId, entry, newStatus?)` | Batch write: subcollection entry + status update, atomic |
-| `addNote(offerId, note)` | Write to `offers/{id}/notes` subcollection |
-| `updateSections(offerId, sections)` | Replace the embedded sections array |
-| `updateLineItems(offerId, items, discountPct, vatRate)` | Replace line items + recalculate and store totals |
-| `createTemplate` / `updateTemplate` / `archiveTemplate` | Template CRUD |
+| `addWorkflowLogEntry(offerId, entry, newStatus?, systemNote?)` | Batch: subcollection entry + status + optional note — atomic |
+| `addNote(offerId, note)` | Standalone write to `offers/{id}/notes` |
+| `updateSections(offerId, sections)` | Replace embedded sections array |
+| `updateLineItems(offerId, items, discountPct, vatRate)` | Replace line items + recalculate totals |
+| Template CRUD | `createTemplate`, `updateTemplate`, `archiveTemplate` |
+
+### useOffersSettings — what it exposes
+
+| Value | Type | Description |
+|---|---|---|
+| `offerWorkflowRoles` | `string[]` | Loaded from `offer_settings/general.workflow_roles`; defaults to `DEFAULT_OFFER_WORKFLOW_ROLES` |
+| `updateOfferWorkflowRoles(roles)` | `Promise<void>` | Persists to Firestore + updates local state |
+| `offerSettingsLoading` | `boolean` | True until initial getDoc resolves |
 
 ---
 
@@ -62,30 +72,71 @@ Returns `{ workflowLog, notes, loadingDetail }`.
 
 **File:** `src/modules/offers/utils/offerNumber.ts`
 
-`generateOfferNumber()` is **async**. It uses a Firestore `runTransaction` on `appSettings/offerCounter` to atomically increment `lastSequence` and return a collision-safe number.
+`generateOfferNumber()` is **async**. Uses `runTransaction` on `appSettings/offerCounter`. Collision-safe.
 
 Format: `OFF-{year}-{sequence padded to 4 digits}` — e.g. `OFF-2026-0001`
-
-Same pattern as Finance invoice numbering (`appSettings/invoiceCounter`).
 
 ---
 
 ## Subcollection architecture
 
-As of Phase 0 (2026-04-28), `workflow_log` and `notes` are Firestore subcollections rather than embedded arrays. This prevents documents from approaching the 1 MB Firestore limit as notes and audit trail grow over time.
+As of Phase 0 (2026-04-28), `workflow_log` and `notes` are Firestore subcollections.
 
-| Subcollection | Path | Immutable? |
+| Subcollection | Path | Rules |
 |---|---|---|
-| workflow_log | `offers/{offerId}/workflow_log/{entryId}` | Yes — create only |
-| notes | `offers/{offerId}/notes/{noteId}` | No — update allowed (pin toggle) |
+| workflow_log | `offers/{offerId}/workflow_log/{entryId}` | create only (immutable) |
+| notes | `offers/{offerId}/notes/{noteId}` | create + update (pin toggle); no delete |
 
-**Migration:** Offers created before Phase 0 may still have embedded `workflow_log` and `notes` arrays in the document. These fields are typed as `optional` on `Offer` and are marked `@deprecated`. Old data is not migrated automatically — the subcollection subscriptions will simply return empty for pre-Phase-0 documents until those offers are transitioned again.
+---
+
+## Workflow audit trail — WorkflowLogEntry shape (Phase 1+)
+
+```typescript
+interface WorkflowLogEntry {
+  id:          string;
+  type:        'transition' | 'note';   // Added Phase 1
+  actor_name:  string;
+  actor_email: string;
+  assignee: {                            // Added Phase 1
+    role: string;   // from offerWorkflowRoles
+    name: string;   // required, entered by user
+  };
+  from_status: OfferStatus | null;
+  to_status:   OfferStatus;
+  reason:      string;   // transition reason OR note body
+  is_system_generated?: boolean;
+  created_at:  string;
+}
+```
+
+Pre-Phase-1 entries (missing `type` and `assignee`) are handled with optional chaining in WorkflowPanel.
+
+---
+
+## Workflow transition flow (Phase 1)
+
+1. User sees available transitions as buttons in `WorkflowPanel`
+2. Clicking a button calls `onTransitionRequest(toStatus)` → `OfferBuilderPage` opens `OfferTransitionModal`
+3. Modal collects: role (from `offerWorkflowRoles`), name (required), reason (required if `REASON_REQUIRED`)
+4. On confirm → `handleTransitionConfirm(entry: WorkflowLogEntry)`:
+   - Builds `systemNote: OfferNote` (body = status change summary)
+   - Calls `addWorkflowLogEntry(offerId, entry, toStatus, systemNote)` — **one atomic writeBatch**
+   - Emits `PLATFORM_EVENTS.OFFER_WON` if `toStatus === 'won'`
+
+## Note flow (Phase 1)
+
+1. User clicks "Add Note" in `WorkflowPanel` → `OfferBuilderPage` opens `OfferNoteModal`
+2. Modal collects: role, name (required), note body (required)
+3. On confirm → `handleNoteConfirm(entry: WorkflowLogEntry)`:
+   - Calls `addWorkflowLogEntry(offerId, entry)` — writes to workflow_log only, no status change
+
+**Panel separation:**
+- `WorkflowPanel` shows the full audit trail (transitions + notes, type-differentiated)
+- `NotesPanel` shows user-initiated sticky notes / comments (separate `offers/{id}/notes` subcollection)
 
 ---
 
 ## Offer state machine
-
-**File:** `src/modules/offers/utils/stateMachine.ts`
 
 ```
 draft → under_review
@@ -100,9 +151,9 @@ expired → archived
 archived → (terminal)
 ```
 
-`REASON_REQUIRED = ['revised', 'lost']` — transitions to these states require a written reason.
+`REASON_REQUIRED = ['revised', 'lost']`
 
-**Note:** `expired` has no inbound transitions in the current state machine. It is intended to be set by a future scheduled function that checks `expiry_date`. Until that function exists, `expired` is effectively unreachable through the UI.
+**Note:** `expired` has no inbound UI transitions — intended for a scheduled Cloud Function.
 
 ---
 
@@ -110,60 +161,63 @@ archived → (terminal)
 
 | Page | Route | Purpose |
 |---|---|---|
-| `OffersDashboardPage` | `/offers` | KPI cards, status breakdown, recent offers table |
-| `OffersListPage` | `/offers/list` | Offer list with status filters, search, and New Offer modal |
-| `OfferBuilderPage` | `/offers/builder/:id` | Three-panel editor: section navigator / content editor / workflow+notes sidebar |
-| `TemplatesPage` | `/offers/templates` | Template CRUD — create templates with section type lists |
+| `OffersDashboardPage` | `/offers` | KPI cards, status breakdown, recent offers |
+| `OffersListPage` | `/offers/list` | List with status filters, search, New Offer modal |
+| `OfferBuilderPage` | `/offers/builder/:id` | Three-panel editor + workflow/notes sidebar |
+| `TemplatesPage` | `/offers/templates` | Template CRUD |
 
 ---
 
-## OfferBuilderPage — the core editor
+## OfferBuilderPage — three-panel layout
 
-**File:** `src/modules/offers/pages/OfferBuilderPage.tsx`
-
-Three-panel layout:
-- **Left** — `SectionNavigator`: ordered section list with move/remove/add controls
-- **Center** — `SectionEditor`: content editor per section; dispatches to `PricingSection` when `section.type === 'pricing_table'`
-- **Right** — tabbed panel: `WorkflowPanel` (audit trail + transitions) and `NotesPanel` (internal notes)
+- **Left** — `SectionNavigator`: section list, move/remove/add controls
+- **Center** — `SectionEditor`: content editor; routes to `PricingSection` for `pricing_table` type
+- **Right** — tabbed: `WorkflowPanel` (audit trail + actions) / `NotesPanel` (sticky notes)
 
 ### Read-only mode
 
-Statuses `approved`, `sent_to_client`, `won`, `lost`, `archived` set `readOnly = true`. The center editor and pricing table disable all inputs. The workflow panel still shows available transitions (e.g. `won → archived`).
+Statuses `approved`, `sent_to_client`, `won`, `lost`, `archived` → `readOnly = true`. Content editor disabled; WorkflowPanel still shows available transitions (e.g. `won → archived`). Clicking a transition button while `readOnly` is guarded in `onTransitionRequest`.
 
 ---
 
-## Workflow audit trail
+## Configurable workflow roles
 
-`WorkflowPanel` receives `workflowLog: WorkflowLogEntry[]` as a prop (sourced from `useOfferDetail`). Entries are stored newest-first in the subcollection via `orderBy('created_at', 'desc')`.
+**Source:** `offer_settings/general.workflow_roles` (Firestore)  
+**Default:** `DEFAULT_OFFER_WORKFLOW_ROLES` from `types.ts`  
+**Consumed by:** `OfferTransitionModal`, `OfferNoteModal`
 
-The transition flow:
-1. User selects a target status in `WorkflowPanel`
-2. `OfferBuilderPage.handleTransition` builds a `WorkflowLogEntry` + system `OfferNote`
-3. `addWorkflowLogEntry(offerId, entry, toStatus)` — atomic batch (status + log entry)
-4. `addNote(offerId, systemNote)` — separate write (Phase 1 will batch with step 3)
-5. If `toStatus === 'won'`, emits `PLATFORM_EVENTS.OFFER_WON` via `platformBus`
-
-**Known gap (Phase 1):** The system note in step 4 is written after step 3. If step 3 succeeds and step 4 fails, the status changes without a system note. This is tracked in `docs/08-known-issues-and-todos.md`.
+A settings UI page for editing roles will be added in a future phase (matching the CMS "أدوار سير العمل" settings section).
 
 ---
 
 ## Pricing
 
-**File:** `src/modules/offers/utils/pricing.ts`
+- `calculateLineTotal(item)` — `(qty × unitPrice) × (1 - discountPct/100)`, 2 d.p.
+- `calculateTotals(lineItems, globalDiscountPct, vatRate)` — subtotal, discount, VAT, total
+- `formatCurrency(amount, currency)` — `Intl.NumberFormat`
 
-- `calculateLineTotal(item)` — `(qty × unitPrice) × (1 - discountPct/100)`, rounded to 2 d.p.
-- `calculateTotals(lineItems, globalDiscountPct, vatRate)` — subtotal, discount, VAT, total; filters `is_included = true` items only
-- `formatCurrency(amount, currency)` — uses `Intl.NumberFormat`; falls back to `${currency} X.XX` on error
+Totals written to offer document for dashboard aggregation.
 
-Totals are computed client-side and written to the offer document to support sorting and dashboard aggregation without re-computing on read.
+---
+
+## Feedback pattern
+
+Offers module uses inline toast state — no `ToastProvider` dependency:
+
+```typescript
+const [toast, setToast] = useState<string | null>(null);
+function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000); }
+```
+
+Do not add `alert()` calls.
 
 ---
 
 ## Cross-module events
 
-| Event | Emitted by | Payload | Intended listener |
+| Event | Emitted | Payload | Subscriber |
 |---|---|---|---|
-| `OFFER_WON` | `OfferBuilderPage` on `won` transition | `{ offerId, offerNumber, clientName, totalValue }` | CMS module (Phase 3) — auto-creates contract draft |
+| `OFFER_WON` | `OfferBuilderPage` on `won` transition | `{ offerId, offerNumber, clientName, totalValue }` | Phase 3 — CMS listener auto-creates contract draft |
 
 ---
 
@@ -171,38 +225,22 @@ Totals are computed client-side and written to the offer document to support sor
 
 | Collection / Subcollection | Description |
 |---|---|
-| `offers` | One document per offer; embeds `sections[]` and `line_items[]` |
-| `offers/{id}/workflow_log` | Immutable audit trail entries; create-only |
-| `offers/{id}/notes` | Internal notes; create + update allowed (pin toggle) |
-| `offer_templates` | Template documents with section type lists |
-| `appSettings/offerCounter` | Atomic sequence counter for offer numbering |
+| `offers` | Offer documents; embeds `sections[]` and `line_items[]` |
+| `offers/{id}/workflow_log` | Immutable audit trail; create-only |
+| `offers/{id}/notes` | Internal notes; create + update (pin) |
+| `offer_templates` | Template documents |
+| `appSettings/offerCounter` | Atomic offer number sequence |
+| `offer_settings/general` | Module config: `workflow_roles[]` (Phase 1+) |
 
 ---
 
-## Feedback pattern
+## Known gaps (Phase 2+)
 
-The Offers module does not use `ToastProvider` (Finance-only). It uses an inline toast state:
-
-```typescript
-const [toast, setToast] = useState<string | null>(null);
-function showToast(msg: string) {
-  setToast(msg);
-  setTimeout(() => setToast(null), 3000);
-}
-```
-
-Do not add `alert()` calls.
-
----
-
-## Known gaps (Phase 1+)
-
-- No PDF export / preview portal (Phase 2)
-- No version history (Phase 3)
-- Status labels hardcoded in types (not settings-driven like CMS contract statuses)
-- `WorkflowLogEntry` has no `assignee` field yet (Phase 1 parity with `WorkflowEvent` in CMS)
-- System note (addNote) after transition is not batched with addWorkflowLogEntry (Phase 1)
-- `expired` status has no inbound transition — requires a scheduled function
-- `OFFER_WON` platformBus event emitted but no subscriber registered yet (Phase 3)
+- No PDF export / preview portal
+- No version history (OfferVersion snapshots)
+- Status labels hardcoded (not settings-driven like CMS contract_statuses)
+- No settings UI page for editing `offerWorkflowRoles`
+- `expired` status has no inbound transition (needs scheduled function)
+- `OFFER_WON` event has no subscriber yet (Phase 3)
 
 See `docs/08-known-issues-and-todos.md` for the full tracker.

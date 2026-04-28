@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // ── Platform-wide shared ────────────────────────────────────────────────
+    // ── Platform-wide shared ──────────────────────────────────────────────────
 
     match /shared_clients/{document=**} {
       allow read, write: if isAuthenticated();
@@ -17,7 +17,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // ── Finance ─────────────────────────────────────────────────────────────
+    // ── Finance ───────────────────────────────────────────────────────────────
 
     match /projects/{document=**} {
       allow read, write: if isAuthenticated();
@@ -50,7 +50,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // ── CMS ─────────────────────────────────────────────────────────────────
+    // ── CMS ───────────────────────────────────────────────────────────────────
 
     match /cms_contracts/{document=**} {
       allow read, write: if isAuthenticated();
@@ -68,8 +68,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // ── Offers ──────────────────────────────────────────────────────────────
-    // Offer documents embed sections and line_items as arrays.
+    // ── Offers ────────────────────────────────────────────────────────────────
     // workflow_log and notes live in subcollections (Phase 0, 2026-04-28).
 
     match /offers/{offerId} {
@@ -78,15 +77,14 @@ service cloud.firestore {
       allow update: if isAuthenticated();
       allow delete: if false; // soft-delete via status='archived' only
 
-      // Workflow log — immutable audit trail.
-      // Entries can be created but never modified or deleted.
+      // Immutable audit trail — create only, no edits or deletes.
       match /workflow_log/{entryId} {
         allow read, create: if isAuthenticated();
         allow update, delete: if false;
       }
 
-      // Notes — can be created and updated (e.g. pin toggle).
-      // Deletion is disallowed to preserve the note history.
+      // Notes — create and update allowed (e.g. pin toggle).
+      // Deletion disallowed to preserve history.
       match /notes/{noteId} {
         allow read, create, update: if isAuthenticated();
         allow delete: if false;
@@ -100,7 +98,12 @@ service cloud.firestore {
       allow delete: if false; // archive only
     }
 
-    // ── Default deny ────────────────────────────────────────────────────────
+    // Offer module settings — workflow roles and future config.
+    match /offer_settings/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ── Default deny ──────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

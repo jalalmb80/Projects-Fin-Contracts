@@ -3,11 +3,12 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { FileText, LayoutDashboard, Layers } from 'lucide-react';
 import { usePlatform } from '../../../core/context/PlatformContext';
 import { OffersProvider } from '../context/OffersContext';
+import { OffersSettingsProvider } from '../context/OffersSettingsContext';
 
 const NAV = [
-  { to: '/offers',           icon: LayoutDashboard, label: 'Dashboard',  end: true },
-  { to: '/offers/list',      icon: FileText,        label: 'Offers'           },
-  { to: '/offers/templates', icon: Layers,          label: 'Templates'        },
+  { to: '/offers',           icon: LayoutDashboard, label: 'Dashboard', end: true },
+  { to: '/offers/list',      icon: FileText,        label: 'Offers'          },
+  { to: '/offers/templates', icon: Layers,          label: 'Templates'       },
 ];
 
 function OffersLayoutInner() {
@@ -45,11 +46,11 @@ function OffersLayoutInner() {
         </nav>
 
         <div className="p-3 border-t border-slate-100">
-          {/* Footer slot — intentionally minimal */}
+          {/* Footer slot */}
         </div>
       </aside>
 
-      {/* Main */}
+      {/* Main content */}
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
@@ -68,11 +69,15 @@ export default function OffersLayout() {
     );
   }
 
-  // OffersProvider runs useOffers() exactly once here — all child pages
-  // consume via useOffersContext() without opening duplicate listeners.
+  // Provider order (outermost → innermost):
+  //   OffersProvider        — Firestore listeners for offers + templates
+  //   OffersSettingsProvider — getDoc for offer_settings/general (workflow roles)
+  //   OffersLayoutInner     — layout shell + Outlet
   return (
     <OffersProvider>
-      <OffersLayoutInner />
+      <OffersSettingsProvider>
+        <OffersLayoutInner />
+      </OffersSettingsProvider>
     </OffersProvider>
   );
 }

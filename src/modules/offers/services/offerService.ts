@@ -9,7 +9,7 @@ import {
 } from '../types';
 import { calculateTotals } from '../utils/pricing';
 
-// ── Offers collection ─────────────────────────────────────────────────────────
+// ── Offers collection ──────────────────────────────────────────────────────────
 
 export function subscribeOffers(
   onData:  (offers: Offer[]) => void,
@@ -23,11 +23,10 @@ export function subscribeOffers(
 }
 
 /**
- * createOffer — batch write that atomically creates the offer document
- * and its first workflow_log subcollection entry.
- *
- * The offer object must NOT include notes or workflow_log fields;
- * those live exclusively in subcollections.
+ * createOffer — batch write:
+ *   1. Creates the offer document.
+ *   2. Writes the initial workflow_log subcollection entry.
+ * Atomic — both writes succeed or neither does.
  */
 export async function createOffer(
   offer:                Omit<Offer, 'notes' | 'workflow_log'>,
@@ -56,8 +55,7 @@ export async function updateOffer(
 
 /**
  * subscribeWorkflowLog — real-time listener on offers/{offerId}/workflow_log.
- * Entries are returned newest-first (orderBy created_at desc).
- * Use this instead of reading offer.workflow_log (now @deprecated).
+ * Returns newest-first (orderBy created_at desc).
  */
 export function subscribeWorkflowLog(
   offerId: string,
@@ -76,19 +74,21 @@ export function subscribeWorkflowLog(
 
 /**
  * addWorkflowLogEntry — batch write:
- *   1. Writes the log entry to offers/{offerId}/workflow_log/{entry.id}
+ *   1. Writes the log entry to offers/{offerId}/workflow_log/{entry.id}  (immutable)
  *   2. Updates offers/{offerId}.status (if newStatus provided) + updated_at
+ *   3. Optionally writes a system OfferNote to offers/{offerId}/notes/{note.id}
  *
- * Atomic — either both writes succeed or neither does.
- * Note: B2 (system-note atomicity with addNote) is tracked for Phase 1.
+ * Atomic — all writes succeed or none do.
+ * Fixes #9: system note is no longer a separate fire-and-forget write.
  */
 export async function addWorkflowLogEntry(
-  offerId:   string,
-  entry:     WorkflowLogEntry,
+  offerId:    string,
+  entry:      WorkflowLogEntry,
   newStatus?: OfferStatus,
+  systemNote?: OfferNote,
 ): Promise<void> {
-  const batch   = writeBatch(db);
-  const logRef  = doc(db, 'offers', offerId, 'workflow_log', entry.id);
+  const batch    = writeBatch(db);
+  const logRef   = doc(db, 'offers', offerId, 'workflow_log', entry.id);
   const offerRef = doc(db, 'offers', offerId);
 
   batch.set(logRef, entry);
@@ -99,6 +99,10 @@ export async function addWorkflowLogEntry(
   if (newStatus !== undefined) offerPatch.status = newStatus;
   batch.update(offerRef, offerPatch);
 
+  if (systemNote !== undefined) {
+    batch.set(doc(db, 'offers', offerId, 'notes', systemNote.id), systemNote);
+  }
+
   await batch.commit();
 }
 
@@ -106,8 +110,7 @@ export async function addWorkflowLogEntry(
 
 /**
  * subscribeNotes — real-time listener on offers/{offerId}/notes.
- * Entries are returned newest-first (orderBy created_at desc).
- * Use this instead of reading offer.notes (now @deprecated).
+ * Returns newest-first (orderBy created_at desc).
  */
 export function subscribeNotes(
   offerId: string,
@@ -144,10 +147,10 @@ export async function updateSections(
 }
 
 export async function updateLineItems(
-  offerId:          string,
-  lineItems:        LineItem[],
+  offerId:           string,
+  lineItems:         LineItem[],
   globalDiscountPct: number,
-  vatRate:          number,
+  vatRate:           number,
 ): Promise<void> {
   const totals = calculateTotals(lineItems, globalDiscountPct, vatRate);
   await updateDoc(doc(db, 'offers', offerId), {
