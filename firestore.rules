@@ -7,6 +7,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // ── Helper: counter write guard ────────────────────────────────────────────
+    // Ensures counter documents can only be written with a single
+    // positive integer field named lastSequence. This prevents any
+    // authenticated user from resetting or corrupting the sequence,
+    // which would cause duplicate invoice/offer numbers.
+    function isValidCounterWrite() {
+      return isAuthenticated()
+        && request.resource.data.keys().hasOnly(['lastSequence'])
+        && request.resource.data.lastSequence is int
+        && request.resource.data.lastSequence > 0;
+    }
+
     // ── Platform-wide shared ────────────────────────────────────────────────
 
     match /shared_clients/{document=**} {
@@ -18,27 +30,51 @@ service cloud.firestore {
 
     // ── Finance ───────────────────────────────────────────────────────────────
 
-    match /projects/{document=**}        { allow read, write: if isAuthenticated(); }
-    match /billingDocuments/{document=**}{ allow read, write: if isAuthenticated(); }
-    match /payments/{document=**}        { allow read, write: if isAuthenticated(); }
-    match /subscriptions/{document=**}   { allow read, write: if isAuthenticated(); }
-    match /counterparties/{document=**}  { allow read, write: if isAuthenticated(); }
-    match /products/{document=**}        { allow read, write: if isAuthenticated(); }
-    match /legalEntities/{document=**}   { allow read, write: if isAuthenticated(); }
-    match /budgetCategories/{document=**}{ allow read, write: if isAuthenticated(); }
-    match /transactions/{document=**}    { allow read, write: if isAuthenticated(); }
-    match /appSettings/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /projects/{document=**}         { allow read, write: if isAuthenticated(); }
+    match /billingDocuments/{document=**}  { allow read, write: if isAuthenticated(); }
+    match /payments/{document=**}          { allow read, write: if isAuthenticated(); }
+    match /subscriptions/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /counterparties/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /products/{document=**}          { allow read, write: if isAuthenticated(); }
+    match /legalEntities/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /budgetCategories/{document=**}  { allow read, write: if isAuthenticated(); }
+    match /transactions/{document=**}      { allow read, write: if isAuthenticated(); }
+
+    // invoiceCounter — field-restricted write. Prevents authenticated users
+    // from resetting the sequence and causing duplicate invoice numbers.
+    // Wildcard rule below excludes these two docs via docId guard.
+    match /appSettings/invoiceCounter {
+      allow read:  if isAuthenticated();
+      allow write: if isValidCounterWrite();
+    }
+
+    // offerCounter — same field-restricted write protection.
+    match /appSettings/offerCounter {
+      allow read:  if isAuthenticated();
+      allow write: if isValidCounterWrite();
+    }
+
+    // All other appSettings documents (general config, defaults, etc.).
+    // The docId guard here is critical: Firestore rules are additive (any
+    // matching rule that allows wins). Excluding the counter doc IDs prevents
+    // this wildcard rule from silently overriding the restricted rules above.
+    match /appSettings/{docId} {
+      allow read:  if isAuthenticated();
+      allow write: if isAuthenticated()
+        && docId != 'invoiceCounter'
+        && docId != 'offerCounter';
+    }
 
     // ── CMS ─────────────────────────────────────────────────────────────────
 
-    match /cms_contracts/{document=**}   { allow read, write: if isAuthenticated(); }
-    match /cms_clients/{document=**}     { allow read, write: if isAuthenticated(); }
-    match /cms_templates/{document=**}   { allow read, write: if isAuthenticated(); }
-    match /cms_projects/{document=**}    { allow read, write: if isAuthenticated(); }
-    match /cms_settings/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /cms_contracts/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /cms_clients/{document=**}      { allow read, write: if isAuthenticated(); }
+    match /cms_templates/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /cms_projects/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /cms_settings/{document=**}     { allow read, write: if isAuthenticated(); }
 
     // ── Offers ──────────────────────────────────────────────────────────────
-    // workflow_log, notes, and versions are subcollections (Phase 0+).
+    // workflow_log, notes, and versions are subcollections.
 
     match /offers/{offerId} {
       allow read:   if isAuthenticated();
@@ -46,7 +82,7 @@ service cloud.firestore {
       allow update: if isAuthenticated();
       allow delete: if false;  // soft-delete via status='archived' only
 
-      // Immutable audit trail — create only.
+      // Immutable audit trail — create only, never update or delete.
       match /workflow_log/{entryId} {
         allow read, create:   if isAuthenticated();
         allow update, delete: if false;
@@ -69,9 +105,10 @@ service cloud.firestore {
       allow read:   if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
-      allow delete: if false;
+      allow delete: if false;  // archive-only via status field
     }
 
+    // Offer module settings — workflow roles and future config.
     match /offer_settings/{document=**} {
       allow read, write: if isAuthenticated();
     }
