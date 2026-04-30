@@ -1,24 +1,26 @@
 import React, { useState } from 'react';
-import { Plus, Archive, X } from 'lucide-react';
+import { Plus, Archive, Edit2, X } from 'lucide-react';
 import { useOffersContext } from '../context/OffersContext';
 import { usePlatform } from '../../../core/context/PlatformContext';
 import {
   OfferTemplate, OfferTemplateSection, OfferLanguage,
   SectionType, SECTION_TYPE_LABELS,
 } from '../types';
+import OfferTemplateEditor from '../components/OfferTemplateEditor';
 
 export default function TemplatesPage() {
-  const { templates, createTemplate, updateTemplate, archiveTemplate } = useOffersContext();
+  const { templates, createTemplate, archiveTemplate } = useOffersContext();
   const { user } = usePlatform();
 
-  const [showModal,  setShowModal]  = useState(false);
-  const [nameEn,     setNameEn]     = useState('');
-  const [nameAr,     setNameAr]     = useState('');
-  const [descEn,     setDescEn]     = useState('');
-  const [language,   setLanguage]   = useState<OfferLanguage>('en');
-  const [sections,   setSections]   = useState<OfferTemplateSection[]>([]);
-  const [creating,   setCreating]   = useState(false);
-  const [toast,      setToast]      = useState<string | null>(null);
+  const [showModal,    setShowModal]    = useState(false);
+  const [editingTpl,   setEditingTpl]   = useState<OfferTemplate | null>(null);
+  const [nameEn,       setNameEn]       = useState('');
+  const [nameAr,       setNameAr]       = useState('');
+  const [descEn,       setDescEn]       = useState('');
+  const [language,     setLanguage]     = useState<OfferLanguage>('en');
+  const [sections,     setSections]     = useState<OfferTemplateSection[]>([]);
+  const [creating,     setCreating]     = useState(false);
+  const [toast,        setToast]        = useState<string | null>(null);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -39,10 +41,6 @@ export default function TemplatesPage() {
         default_content: '',
       },
     ]);
-  }
-
-  function removeSection(id: string) {
-    setSections(prev => prev.filter(s => s.id !== id));
   }
 
   async function handleCreate() {
@@ -91,8 +89,17 @@ export default function TemplatesPage() {
 
   const active   = templates.filter(t => t.status === 'active');
   const archived = templates.filter(t => t.status === 'archived');
-
   const ALL_TYPES = Object.keys(SECTION_TYPE_LABELS) as SectionType[];
+
+  // Open full-screen editor overlay
+  if (editingTpl) {
+    return (
+      <OfferTemplateEditor
+        template={editingTpl}
+        onClose={() => setEditingTpl(null)}
+      />
+    );
+  }
 
   return (
     <div className="p-6">
@@ -112,7 +119,12 @@ export default function TemplatesPage() {
       {/* Active templates */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
         {active.map(t => (
-          <TemplateCard key={t.id} template={t} onArchive={() => handleArchive(t.id)} />
+          <TemplateCard
+            key={t.id}
+            template={t}
+            onEdit={() => setEditingTpl(t)}
+            onArchive={() => handleArchive(t.id)}
+          />
         ))}
         {active.length === 0 && (
           <div className="col-span-full py-12 text-center text-slate-400 text-sm">
@@ -157,7 +169,7 @@ export default function TemplatesPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1" dir="rtl">\u0627\u0644\u0627\u0633\u0645 (AR)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1" dir="rtl">الاسم (AR)</label>
                 <input
                   value={nameAr}
                   onChange={e => setNameAr(e.target.value)}
@@ -185,13 +197,12 @@ export default function TemplatesPage() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
               >
                 <option value="en">English</option>
-                <option value="ar">\u0639\u0631\u0628\u064a</option>
+                <option value="ar">عربي</option>
               </select>
             </div>
 
-            {/* Section picker */}
             <div>
-              <p className="text-xs font-medium text-slate-600 mb-2">Sections</p>
+              <p className="text-xs font-medium text-slate-600 mb-2">Initial sections (optional)</p>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {ALL_TYPES.map(type => (
                   <button
@@ -204,14 +215,14 @@ export default function TemplatesPage() {
                 ))}
               </div>
               {sections.length > 0 && (
-                <div className="space-y-1 max-h-40 overflow-y-auto">
+                <div className="space-y-1 max-h-32 overflow-y-auto">
                   {sections.map(sec => (
                     <div key={sec.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5">
                       <span className="text-xs text-slate-700">
-                        {sec.is_fixed ? '\uD83D\uDD12 ' : ''}{sec.title_en}
+                        {sec.is_fixed ? '🔒 ' : ''}{sec.title_en}
                       </span>
                       <button
-                        onClick={() => removeSection(sec.id)}
+                        onClick={() => setSections(p => p.filter(s => s.id !== sec.id))}
                         className="p-0.5 text-slate-400 hover:text-red-500 transition-colors"
                       >
                         <X size={11} />
@@ -220,6 +231,9 @@ export default function TemplatesPage() {
                   ))}
                 </div>
               )}
+              <p className="text-xs text-slate-400 mt-1.5">
+                You can add and edit section content in the template editor after creating.
+              </p>
             </div>
 
             <div className="flex gap-3 pt-2">
@@ -245,43 +259,59 @@ export default function TemplatesPage() {
 }
 
 function TemplateCard({
-  template, onArchive, archived = false,
-}: { template: OfferTemplate; onArchive?: () => void; archived?: boolean }) {
+  template, onEdit, onArchive, archived = false,
+}: {
+  template: OfferTemplate;
+  onEdit?: () => void;
+  onArchive?: () => void;
+  archived?: boolean;
+}) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
+    <div className="bg-white border border-slate-200 rounded-xl p-4 hover:border-violet-200 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div>
-          <h3 className="font-medium text-slate-900 text-sm">{template.name_en}</h3>
+        <div className="min-w-0">
+          <h3 className="font-medium text-slate-900 text-sm truncate">{template.name_en}</h3>
           {template.name_ar && (
-            <p className="text-xs text-slate-500" dir="rtl">{template.name_ar}</p>
+            <p className="text-xs text-slate-500 truncate" dir="rtl">{template.name_ar}</p>
           )}
         </div>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 flex-shrink-0">
           v{template.version}
         </span>
       </div>
 
       {template.description_en && (
-        <p className="text-xs text-slate-500 mb-3">{template.description_en}</p>
+        <p className="text-xs text-slate-500 mb-3 line-clamp-2">{template.description_en}</p>
       )}
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-slate-400">
           {template.sections.length} section{template.sections.length !== 1 ? 's' : ''}
-          {' \u00b7 '}
+          {' · '}
           {template.language.toUpperCase()}
         </span>
-        {!archived && onArchive && (
-          <button
-            onClick={onArchive}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition-colors"
-          >
-            <Archive size={11} /> Archive
-          </button>
+
+        {!archived && (
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-medium transition-colors"
+              >
+                <Edit2 size={11} /> Edit
+              </button>
+            )}
+            {onArchive && (
+              <button
+                onClick={onArchive}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition-colors"
+              >
+                <Archive size={11} /> Archive
+              </button>
+            )}
+          </div>
         )}
-        {archived && (
-          <span className="text-xs text-slate-400">Archived</span>
-        )}
+        {archived && <span className="text-xs text-slate-400">Archived</span>}
       </div>
     </div>
   );

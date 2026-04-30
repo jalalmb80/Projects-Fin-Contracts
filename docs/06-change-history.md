@@ -9,7 +9,7 @@ This document records every meaningful change made to the project, including the
 ---
 
 ### `c34925c` — Initial commit *(2026-04-07)*
-GitHub’s automatic initial commit.
+GitHub's automatic initial commit.
 
 ---
 
@@ -98,42 +98,41 @@ Bilingual preview portal (two modes: preview/download); oklch-safe PDF export; P
 
 ---
 
-### Phase 3 — feat(offers/cms): OfferVersion snapshots + OFFER_WON → CreateContractFromOfferModal *(2026-04-28)*
+### `ab182ba` — feat(offers/cms): Phase 3 — OfferVersion snapshots + OFFER_WON → CreateContractFromOfferModal *(2026-04-28)*
+`OfferVersion` subcollection written atomically on every status transition; History tab in right panel; `CMSOfferWonHandler` subscribes in `CMSLayout`; `CreateContractFromOfferModal` pre-fills contract draft; `linked_offer_id` back-reference.
 
-**Motivation:**
-- Offers needed a content history so users can see what an offer looked like before each status transition.
-- `OFFER_WON` was emitted but nothing listened; winning an offer should prompt creation of a CMS contract draft.
+---
 
-**3A — OfferVersion snapshots**
+### Phase 4 — feat(offers): OfferTemplateEditor, bilingual labels, shared PDF engine *(2026-04-28)*
 
-*Files created:*
-- `src/modules/offers/hooks/useOfferVersions.ts` — subscribes to `offers/{id}/versions` (newest-first); used only in History tab.
+**Motivation:** Three remaining gaps closed to complete the Offers module: (1) templates had no content-editing UI; (2) status labels were hardcoded English everywhere; (3) the PDF engine was duplicated across CMS and Offers.
 
-*Files modified:*
-- `src/modules/offers/types.ts` — added `OfferVersionSnapshot` (= `Omit<Offer, 'notes' | 'workflow_log'>`) and `OfferVersion { id, version_number, created_at, change_summary, snapshot }`.
-- `src/modules/offers/services/offerService.ts` — added `subscribeVersions()`; extended `addWorkflowLogEntry` with optional 5th parameter `versionSnapshot?: OfferVersion` — written to `offers/{id}/versions/{versionId}` in the same `writeBatch` as the log entry, status update, and system note.
-- `src/modules/offers/pages/OfferBuilderPage.tsx` — `handleTransitionConfirm` builds `OfferVersion` snapshot (pre-transition content state) and passes it to `addWorkflowLogEntry`; right panel gains a **History** tab (third tab alongside Workflow and Notes) backed by `useOfferVersions`; `VersionsPanel` inline component renders version cards.
-- `firestore.rules` — `offers/{offerId}/versions/{versionId}` added: `read, create` only (immutable snapshots).
-- `src/modules/offers/index.ts` — exports `useOfferVersions`, `OfferVersion`, `OfferVersionSnapshot`.
+**4A — OfferTemplateEditor**
 
-*Design decisions:*
-- Versions are a **subcollection** (not embedded) because each snapshot contains `sections[]` + `line_items[]`. Embedding them would accelerate the 1 MB document-size limit reached with `workflow_log` + `notes`.
-- `version_number = workflowLog.length + 1` at the time of transition: correct and no Firestore round-trip needed.
-- The snapshot is taken **before** the transition (current `offer` state). This records what the offer looked like before the status changed.
-- Manual snapshots (user-triggered) are Phase 4.
+*File created:*
+- `src/modules/offers/components/OfferTemplateEditor.tsx` — full-screen editor opened from TemplatesPage when user clicks Edit on a template card.
+  - **Metadata tab:** name (EN + AR), description (EN + AR), default language.
+  - **Sections tab:** ordered section list with up/down reorder, add-from-type-picker, remove, and inline editing of `title_en`, `title_ar`, and `default_content` per section. `default_content` uses a resizable textarea; `dir` follows template language.
+  - Local draft copy — no Firestore writes until "Save Template" is clicked.
+  - Save calls `updateTemplate(id, {...})` from `useOffersContext` and bumps `version`.
 
-**3B — OFFER_WON → CreateContractFromOfferModal**
+*File modified:*
+- `src/modules/offers/pages/TemplatesPage.tsx` — **Edit** button added to active `TemplateCard`; clicking sets `editingTpl` state; when non-null, returns `<OfferTemplateEditor>` in place of the page. `TemplateCard` component now receives `onEdit?` prop. `updateTemplate` no longer imported from context (now handled inside the editor). Create modal note updated to direct users to the editor for content.
 
-*Files created:*
-- `src/modules/cms/components/CreateContractFromOfferModal.tsx` — Arabic-RTL modal pre-filled from OFFER_WON payload (offer number, client, total value). Generates a contract number placeholder (`CNT-{year}-OFF-{offerNumber}`), creates a minimal `Contract` draft with `status: 'مسودة'`, sets `linked_offer_id: offerId`. Writes directly via `setDoc(doc(db, 'cms_contracts', id), contract)` — no `useContracts()` dependency, matching `CreateFinanceProjectModal` pattern.
+**4B — Bilingual labels**
 
 *Files modified:*
-- `src/modules/cms/types.ts` — added `linked_offer_id?: string` to `Contract` interface.
-- `src/modules/cms/components/CMSLayout.tsx` — added `CMSOfferWonHandler` function component: subscribes to `PLATFORM_EVENTS.OFFER_WON` via `platformBus.on()` in `useEffect` (cleanup is the returned unsubscribe function); stores payload in state; renders `CreateContractFromOfferModal` when payload is non-null. Mounted inside `CMSLayoutInner` so it has access to `LanguageProvider` + `SettingsProvider`.
-- `src/core/events/platformBus.ts` — OFFER_WON payload comment updated to include `clientId: string` (was missing).
-- `src/modules/offers/pages/OfferBuilderPage.tsx` — `handleTransitionConfirm` now emits `clientId: offer.client_id` in the OFFER_WON payload.
+- `src/modules/offers/components/WorkflowBadge.tsx` — `lang?: OfferLanguage` prop added (default `'en'`). Badge now renders `STATUS_LABELS[status][lang]`.
+- `src/modules/offers/components/OfferCard.tsx` — passes `lang={offer.language}` to `WorkflowBadge` so Arabic offers display Arabic status labels. Also fixes audit F2 (`isExpired` now uses `date-fns` `isBefore(parseISO(expiry_date), startOfDay(new Date()))` to avoid UTC-midnight timezone false positives).
+- `src/modules/offers/components/WorkflowPanel.tsx` — all status labels now use `STATUS_LABELS[s][offer.language]`. Transition button labels have bilingual EN/AR entries. "Add Note", "History", "No activity yet" strings switch on `offer.language`.
 
-*Design decisions:*
-- The modal appears only when CMS is mounted. This matches the existing `CONTRACT_SIGNED` → `CreateFinanceProjectModal` pattern (which also only appears inside `ContractEditor`). Documented as a known limitation.
-- Payment schedule is pre-filled with a VAT-back-calculated breakdown from `offer.total_value` at 15% VAT. User should verify before finalising.
-- `linked_offer_id` on the contract provides a permanent back-reference from contract to offer for audit and reporting.
+**4C — Shared PDF engine**
+
+*File created:*
+- `src/core/utils/exportPdf.ts` — the canonical export engine (html2canvas + jsPDF + oklch resolver). Public API: `exportToPdf()` and `generatePdfBlob()`.
+
+*Files changed to thin re-exports:*
+- `src/modules/offers/utils/exportPdf.ts` — re-exports `exportToPdf` as `exportOfferToPdf`, `generatePdfBlob` as `generateOfferPdfBlob`.
+- `src/modules/cms/utils/exportPdf.ts` — re-exports `exportToPdf` and `generatePdfBlob`.
+
+Arch debt F resolved. Both modules use the single implementation in `src/core/utils/exportPdf.ts`.

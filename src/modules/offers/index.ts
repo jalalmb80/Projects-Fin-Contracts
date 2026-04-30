@@ -13,13 +13,14 @@ export {
   DEFAULT_OFFER_WORKFLOW_ROLES,
 } from './types';
 
-export { useOffers }                                    from './hooks/useOffers';
-export { useOfferDetail }                               from './hooks/useOfferDetail';
-export { useOfferVersions }                             from './hooks/useOfferVersions';
-export { useOffersContext, OffersProvider }              from './context/OffersContext';
-export { useOffersSettings, OffersSettingsProvider }    from './context/OffersSettingsContext';
+export { useOffers }                                     from './hooks/useOffers';
+export { useOfferDetail }                                from './hooks/useOfferDetail';
+export { useOfferVersions }                              from './hooks/useOfferVersions';
+export { useOffersContext, OffersProvider }               from './context/OffersContext';
+export { useOffersSettings, OffersSettingsProvider }     from './context/OffersSettingsContext';
 export { calculateTotals, calculateLineTotal, formatCurrency } from './utils/pricing';
-export { generateOfferNumber }                          from './utils/offerNumber';
+export { generateOfferNumber }                           from './utils/offerNumber';
 export { canTransition, getAvailableTransitions, REASON_REQUIRED } from './utils/stateMachine';
-export { exportOfferToPdf, generateOfferPdfBlob }       from './utils/exportPdf';
-export { default as OfferPreviewPortal }                from './components/OfferPreviewPortal';
+export { exportOfferToPdf, generateOfferPdfBlob }        from './utils/exportPdf';
+export { default as OfferPreviewPortal }                 from './components/OfferPreviewPortal';
+export { default as OfferTemplateEditor }                from './components/OfferTemplateEditor';

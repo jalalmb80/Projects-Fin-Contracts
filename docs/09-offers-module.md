@@ -8,7 +8,7 @@
 
 ## Purpose
 
-The Offers module generates, manages, and tracks commercial proposals. Supports bilingual content (EN/AR), structured sections, line-item pricing, a workflow state machine with immutable audit trail, internal notes, version history, and PDF export. When an offer is won, a `platformBus` event triggers CMS contract creation.
+The Offers module generates, manages, and tracks commercial proposals. Supports bilingual content (EN/AR), structured sections, line-item pricing, a workflow state machine with immutable audit trail, version history, internal notes, and PDF export. When an offer is won, a `platformBus` event triggers CMS contract creation.
 
 ---
 
@@ -31,25 +31,25 @@ OffersProvider            (onSnapshot: offers + offer_templates)
 |---|---|
 | `createOffer(offer, initialEntry)` | Batch: offer doc + first workflow_log entry |
 | `updateOffer(id, data)` | Partial offer update |
-| `addWorkflowLogEntry(offerId, entry, newStatus?, systemNote?, versionSnapshot?)` | Batch: log + status + note + version, all atomic |
-| `addNote(offerId, note)` | Write to `offers/{id}/notes` subcollection |
+| `addWorkflowLogEntry(offerId, entry, newStatus?, systemNote?, versionSnapshot?)` | Atomic writeBatch: log + status + note + version |
+| `addNote(offerId, note)` | Write to `offers/{id}/notes` |
 | `updateSections / updateLineItems` | Embedded array mutations |
-| Template CRUD | `createTemplate`, `updateTemplate`, `archiveTemplate` |
+| `createTemplate / updateTemplate / archiveTemplate` | Template CRUD |
 
 ---
 
 ## Per-offer hooks (OfferBuilderPage only)
 
-| Hook | Data | Firestore path |
+| Hook | Data | Subcollection |
 |---|---|---|
-| `useOfferDetail(id)` | `workflowLog[]`, `notes[]` | `offers/{id}/workflow_log`, `offers/{id}/notes` |
-| `useOfferVersions(id)` | `versions[]` | `offers/{id}/versions` |
+| `useOfferDetail(id)` | `workflowLog[]`, `notes[]` | `workflow_log`, `notes` |
+| `useOfferVersions(id)` | `versions[]` | `versions` |
 
 ---
 
 ## Offer numbering
 
-`generateOfferNumber()` is async — `runTransaction` on `appSettings/offerCounter`.  
+`generateOfferNumber()` is async — `runTransaction` on `appSettings/offerCounter`.
 Format: `OFF-{year}-{seq 4-padded}` — e.g. `OFF-2026-0001`
 
 ---
@@ -58,73 +58,60 @@ Format: `OFF-{year}-{seq 4-padded}` — e.g. `OFF-2026-0001`
 
 | Subcollection | Path | Rules |
 |---|---|---|
-| workflow_log | `offers/{offerId}/workflow_log/{entryId}` | create only (immutable) |
-| notes | `offers/{offerId}/notes/{noteId}` | create + update (pin); no delete |
-| versions | `offers/{offerId}/versions/{versionId}` | create only (immutable) |
+| workflow_log | `offers/{offerId}/workflow_log/{entryId}` | create only |
+| notes | `offers/{offerId}/notes/{noteId}` | create + update (pin) |
+| versions | `offers/{offerId}/versions/{versionId}` | create only |
 
 ---
 
-## Version history (Phase 3)
+## Version history
 
-`OfferVersion` is written automatically on each status transition inside `addWorkflowLogEntry`’s `writeBatch` — the same atomic write that updates status, adds the log entry, and writes the system note.
-
-```typescript
-interface OfferVersion {
-  id:             string;
-  version_number: number;   // workflowLog.length + 1 at transition time
-  created_at:     string;
-  change_summary: string;   // e.g. "Status: Draft → Under Review"
-  snapshot:       OfferVersionSnapshot;  // full offer minus subcollection fields
-}
-
-type OfferVersionSnapshot = Omit<Offer, 'notes' | 'workflow_log'>;
-```
-
-The snapshot captures the pre-transition content state (sections + line_items + metadata). Subcollection fields are excluded to avoid size-doubling.
-
-Versions are displayed in the **History** tab in the right panel of `OfferBuilderPage`. Snapshot restore (Phase 4) is not yet implemented.
+`OfferVersion` is written on each status transition inside `addWorkflowLogEntry`'s `writeBatch`. Displayed in the **History** tab in `OfferBuilderPage`. Snapshot restore is not yet implemented.
 
 ---
 
-## WorkflowLogEntry shape (Phase 1+)
+## Workflow transition flow
 
-```typescript
-interface WorkflowLogEntry {
-  id:          string;
-  type:        'transition' | 'note';
-  actor_name:  string;
-  actor_email: string;
-  assignee:    { role: string; name: string };
-  from_status: OfferStatus | null;
-  to_status:   OfferStatus;
-  reason:      string;
-  is_system_generated?: boolean;
-  created_at:  string;
-}
-```
+1. Transition button → `onTransitionRequest(toStatus)` → `OfferTransitionModal`
+2. Modal: role + name (required) + reason (required if `REASON_REQUIRED`)
+3. `handleTransitionConfirm` → builds systemNote + versionSnapshot → single atomic `writeBatch`
+4. If `won` → emits `OFFER_WON` → `CMSOfferWonHandler` → `CreateContractFromOfferModal`
 
 ---
 
-## Workflow transition flow (Phase 1)
+## Template editor (Phase 4)
 
-1. Transition button in `WorkflowPanel` → `onTransitionRequest(toStatus)`
-2. `OfferBuilderPage` opens `OfferTransitionModal`
-3. Modal collects role + name (required) + reason (required if `REASON_REQUIRED`)
-4. `handleTransitionConfirm(entry)` builds `systemNote` + `versionSnapshot` → single atomic `writeBatch`
-5. If `toStatus === 'won'` → emits `PLATFORM_EVENTS.OFFER_WON` with `{ offerId, offerNumber, clientId, clientName, totalValue }`
-6. `CMSOfferWonHandler` in `CMSLayout` receives the event and opens `CreateContractFromOfferModal`
+**File:** `offers/components/OfferTemplateEditor.tsx`
+
+Full-screen overlay opened from `TemplatesPage` when user clicks **Edit** on a template card.
+
+| Tab | Content |
+|---|---|
+| Metadata | name (EN + AR), description (EN + AR), default language |
+| Sections | Ordered list: up/down reorder, add from type picker, remove, inline editing of title_en / title_ar / default_content |
+
+`default_content` in each section is what gets pre-filled when an offer is created from the template. Save bumps `version`.
 
 ---
 
-## PDF Preview & Export (Phase 2)
+## Bilingual labels (Phase 4)
 
-**Files:** `offers/utils/exportPdf.ts`, `offers/components/OfferPreviewPortal.tsx`
+`WorkflowBadge` accepts `lang?: OfferLanguage` (default `'en'`). Pass `offer.language` in offer-specific contexts:
+- `OfferCard` → `lang={offer.language}`
+- `WorkflowPanel` → all status labels, transition button labels, and UI strings use `offer.language`
 
-- Toolbar buttons in `OfferBuilderPage`: **Preview** (Eye) → modal, **PDF** (FileDown) → direct download
-- `mode: 'preview'` — full-screen modal with Download PDF + Print + Close
-- `mode: 'download'` — off-screen render, auto-exports then `onClose`
-- Section-type rendering: `cover_page`, `pricing_table`, `payment_schedule`, `signature_block` get special treatment; all others render as title + content
-- Bilingual: `offer.language` drives `dir`, title field, font stack
+Global contexts (dashboard status breakdown, list filter chips) remain English-only since they aggregate all offers regardless of language.
+
+---
+
+## PDF export (Phase 2 + 4)
+
+**Engine:** `src/core/utils/exportPdf.ts` (canonical, shared with CMS)
+**Offer wrapper:** `offers/utils/exportPdf.ts` (thin re-export: `exportOfferToPdf`, `generateOfferPdfBlob`)
+
+Trigger points in `OfferBuilderPage`:
+- **Preview** (Eye) → `setPreviewMode('preview')` → `OfferPreviewPortal` full-screen modal
+- **PDF** (FileDown) → `setPreviewMode('download')` → off-screen render + auto-download
 
 ---
 
@@ -139,7 +126,7 @@ approved → sent_to_client | draft
 sent_to_client → won | lost
 won → archived
 lost → archived
-expired → archived (inbound requires scheduled function)
+expired → archived  (inbound: scheduled Cloud Function only)
 archived → (terminal)
 ```
 
@@ -154,21 +141,21 @@ archived → (terminal)
 | `OffersDashboardPage` | `/offers` | — |
 | `OffersListPage` | `/offers/list` | — |
 | `OfferBuilderPage` | `/offers/builder/:id` | Workflow \| Notes \| History |
-| `TemplatesPage` | `/offers/templates` | — |
+| `TemplatesPage` | `/offers/templates` | — (opens OfferTemplateEditor overlay) |
 
 ---
 
 ## Firestore collections
 
-| Collection / Subcollection | Description |
+| Collection | Description |
 |---|---|
-| `offers` | Offer documents; embeds `sections[]` and `line_items[]` |
+| `offers` | Offer docs; embeds `sections[]` and `line_items[]` |
 | `offers/{id}/workflow_log` | Immutable audit trail |
-| `offers/{id}/notes` | Internal notes; create + update |
-| `offers/{id}/versions` | Immutable content snapshots; one per status transition |
-| `offer_templates` | Template documents |
+| `offers/{id}/notes` | Internal notes |
+| `offers/{id}/versions` | Immutable content snapshots |
+| `offer_templates` | Templates with per-section `default_content` |
 | `appSettings/offerCounter` | Atomic sequence counter |
-| `offer_settings/general` | Module config: `workflow_roles[]` |
+| `offer_settings/general` | Config: `workflow_roles[]` |
 
 ---
 
@@ -176,19 +163,22 @@ archived → (terminal)
 
 | Event | Emitted | Payload | Subscriber |
 |---|---|---|---|
-| `OFFER_WON` | `OfferBuilderPage` on `won` | `{ offerId, offerNumber, clientId, clientName, totalValue }` | `CMSOfferWonHandler` in `CMSLayout` → `CreateContractFromOfferModal` |
-
-**Limitation:** Modal only appears when CMS module is mounted. Tracked in docs/08 issue #14.
+| `OFFER_WON` | OfferBuilderPage on `won` | `{ offerId, offerNumber, clientId, clientName, totalValue }` | `CMSOfferWonHandler` → `CreateContractFromOfferModal` |
 
 ---
 
-## Known gaps (Phase 4+)
+## Feedback pattern
+
+Inline toast state — no `ToastProvider` dependency. Do not add `alert()` calls.
+
+---
+
+## Known gaps
 
 - Version snapshot restore UI
 - Status labels not settings-driven
-- No settings UI page for `offerWorkflowRoles`
-- PDF export engine duplicated from CMS (Phase 4 → `src/core/utils/exportPdf.ts`)
+- No settings UI for `offerWorkflowRoles`
 - `expired` status needs a scheduled Cloud Function
-- OFFER_WON handler should be platform-level (not module-level) for full reliability
+- OFFER_WON handler is module-scoped (only fires when CMS is mounted) — tracked in docs/08 issue #14
 
 See `docs/08-known-issues-and-todos.md` for the full tracker.
