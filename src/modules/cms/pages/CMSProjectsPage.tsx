@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useContracts } from '../hooks/useContracts';
+import { useCMSContext } from '../context/CMSContext';
 import { Plus, Edit2, Trash2, X, AlertCircle, Briefcase } from 'lucide-react';
 import { ProjectStatus } from '../types';
 import { useLang, t } from '../context/LanguageContext';
@@ -13,7 +13,7 @@ const STATUS_COLORS: Record<ProjectStatus, string> = {
 };
 
 export default function CMSProjectsPage() {
-  const { projects, clients, contracts, addProject, updateProject, deleteProject } = useContracts();
+  const { projects, clients, contracts, addProject, updateProject, deleteProject } = useCMSContext();
   const { lang } = useLang();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

@@ -1,16 +1,10 @@
 # 08 — Known Issues & Remaining Work
 
-Updated as of 2026-04-28 (security fixes applied).
+Updated as of 2026-04-28 (CMSProvider — issue #1 resolved).
 
 ---
 
 ## Open issues
-
-### 1. `useContracts` creates multiple listener instances
-**Severity:** Medium (Firestore cost)  
-Fix: lift into `CMSProvider` wrapping `CMSLayout`, matching the Finance and Offers patterns.
-
----
 
 ### 2. Dark mode is partially implemented
 **Severity:** Low  
@@ -74,11 +68,8 @@ History tab shows versions; copying a snapshot back to the live offer is not yet
 
 ## Architectural debt
 
-### A. CMS module lacks a shared context
-Each CMS page opens its own Firestore listeners. A `CMSProvider` wrapping `CMSLayout` would deduplicate subscriptions — matching Finance and Offers patterns.
-
 ### B. No role-based access control
-All authenticated users have full read/write. `isValidCounterWrite()` now protects counters but collection-level RBAC requires Firebase Custom Claims.
+All authenticated users have full read/write. `isValidCounterWrite()` now protects counters. Full RBAC requires Firebase Custom Claims.
 
 ### C. No automated tests
 `npm run lint` runs `tsc --noEmit` only.
@@ -100,10 +91,8 @@ Hardcoded in `types.ts`. Future: `offer_settings/general.offer_statuses[]`.
 - ✅ **Offers Phase 0** — OffersProvider, atomic numbering, subcollections (2026-04-28)
 - ✅ **Offers Phase 1** — WorkflowAssignee, modals, system note batched (2026-04-28)
 - ✅ **Offers Phase 2** — OfferPreviewPortal + PDF export (2026-04-28)
-- ✅ **Offers Phase 3A** — OfferVersion subcollection + History tab (2026-04-28)
-- ✅ **Offers Phase 3B** — OFFER_WON subscriber + CreateContractFromOfferModal (2026-04-28)
-- ✅ **Offers Phase 4A** — OfferTemplateEditor with per-section content editing (2026-04-28)
-- ┅ **Offers Phase 4B** — Bilingual labels: WorkflowBadge lang prop, OfferCard, WorkflowPanel; isExpired date-fns fix (2026-04-28)
-- ✅ **Offers Phase 4C** — Shared PDF engine in `src/core/utils/exportPdf.ts` (2026-04-28)
-- ✅ **Security A1** — Removed `define: { GEMINI_API_KEY }` from vite.config.ts (was injecting key into client bundle via `loadEnv` with no prefix filter, with zero consumers). `.env.example` updated with safe usage notes (2026-04-28)
-- ✅ **Security A2/A3** — Firestore rules: `appSettings/invoiceCounter` and `appSettings/offerCounter` now use `isValidCounterWrite()` — write restricted to `{ lastSequence: <positive int> }` only. Wildcard `appSettings/{docId}` rule excludes counter doc IDs via guard, preventing the more-permissive wildcard from overriding the field-restricted rules (2026-04-28)
+- ┅ **Offers Phase 3** — OfferVersion subcollection + OFFER_WON → CreateContractFromOfferModal (2026-04-28)
+- ✅ **Offers Phase 4** — OfferTemplateEditor, bilingual labels, shared PDF engine (2026-04-28)
+- ✅ **Security A1** — GEMINI_API_KEY removed from vite.config.ts define block (2026-04-28)
+- ✅ **Security A2/A3** — Firestore counter rules: isValidCounterWrite() for invoiceCounter + offerCounter; wildcard guard prevents override (2026-04-28)
+- ✅ **CMS Arch A** — CMSProvider context: useContracts() runs once at CMSLayout level; 5 CMS pages now call useCMSContext() — eliminates up to 15 duplicate onSnapshot connections (2026-04-28)

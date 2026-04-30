@@ -1,16 +1,24 @@
 /**
  * CMSLayout — shell for the CMS module.
  *
- * Phase 3 addition: CMSOfferWonHandler subscribes to the platformBus
- * OFFER_WON event and opens CreateContractFromOfferModal when triggered.
- * The handler only fires when CMS is mounted; if the user is on another
- * module when the offer is won, the modal will not appear. This matches
- * the existing CONTRACT_SIGNED → CreateFinanceProjectModal pattern.
+ * Provider mount order (outermost → innermost):
+ *   LanguageProvider    — t() / useLang() for AR/EN toggling
+ *   SettingsProvider    — contract statuses, types, workflow roles
+ *   CMSProvider         — Firestore listeners (contracts, templates, projects)
+ *   CMSLayoutInner      — sidebar + Outlet + OFFER_WON handler
+ *
+ * CMSProvider runs useContracts() exactly once here.
+ * All CMS pages call useCMSContext() — no duplicate listeners.
+ *
+ * CMSOfferWonHandler subscribes to the platformBus OFFER_WON event
+ * and opens CreateContractFromOfferModal when an offer is won.
+ * The handler only fires when CMS is mounted.
  */
 import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { LanguageProvider, useLang } from '../context/LanguageContext';
 import { SettingsProvider, useSettings } from '../context/SettingsContext';
+import { CMSProvider } from '../context/CMSContext';
 import { platformBus, PLATFORM_EVENTS } from '../../../core/events/platformBus';
 import Sidebar from './Sidebar';
 import CreateContractFromOfferModal from './CreateContractFromOfferModal';
@@ -27,7 +35,6 @@ function CMSOfferWonHandler() {
   const [wonPayload, setWonPayload] = useState<OfferWonPayload | null>(null);
 
   useEffect(() => {
-    // platformBus.on returns an unsubscribe function
     return platformBus.on(PLATFORM_EVENTS.OFFER_WON, (payload: OfferWonPayload) => {
       setWonPayload(payload);
     });
@@ -61,7 +68,7 @@ function CMSLayoutInner() {
 
   return (
     <div className="flex h-full w-full" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* OFFER_WON bus subscriber — renders modal when fired */}
+      {/* OFFER_WON bus subscriber — renders modal when event fires */}
       <CMSOfferWonHandler />
       <Sidebar />
       <div className="flex-1 overflow-y-auto bg-slate-50">
@@ -75,7 +82,16 @@ export default function CMSLayout() {
   return (
     <LanguageProvider>
       <SettingsProvider>
-        <CMSLayoutInner />
+        {/*
+         * CMSProvider runs useContracts() exactly once.
+         * Wraps CMSLayoutInner so the Outlet (pages) can call useCMSContext().
+         * CMSLayoutInner needs to be INSIDE CMSProvider to access context,
+         * but its own hooks (useSettings, useLang) are covered by the
+         * outer providers above.
+         */}
+        <CMSProvider>
+          <CMSLayoutInner />
+        </CMSProvider>
       </SettingsProvider>
     </LanguageProvider>
   );

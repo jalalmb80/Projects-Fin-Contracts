@@ -1,12 +1,12 @@
 import React from 'react';
-import { useContracts } from '../hooks/useContracts';
+import { useCMSContext } from '../context/CMSContext';
 import { FileText, Clock, CheckCircle, AlertCircle, Plus, Users, ChevronRight } from 'lucide-react';
 import { useLang, t } from '../context/LanguageContext';
 import { toHijri } from '../utils/hijriDate';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function CMSDashboardPage() {
-  const { contracts, clients } = useContracts();
+  const { contracts, clients } = useCMSContext();
   const { lang } = useLang();
   const navigate = useNavigate();
 
@@ -83,7 +83,6 @@ export default function CMSDashboardPage() {
         </Link>
       </div>
 
-      {/* BUG-9 FIX: removed stray quote from className template literal */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map(stat => (
           <div key={stat.label_ar} className="bg-white shadow rounded-lg p-6 flex items-center gap-4">
