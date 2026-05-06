@@ -1,23 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 import {
-  DollarSign,
-  Briefcase,
-  FileText,
-  Repeat,
-  TrendingUp,
-  AlertCircle
+  DollarSign, Briefcase, FileText, Repeat, TrendingUp, AlertCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
@@ -43,7 +30,7 @@ export default function Dashboard() {
     displayCurrency,
     setDisplayCurrency,
     formatMoney,
-    convert
+    settings,
   } = useApp();
   const { lang } = useLang();
 
@@ -55,63 +42,130 @@ export default function Dashboard() {
     );
   }
 
-  // --- KPI Calculations ---
-  const totalAR = invoices
-    .filter(i => i.direction === DocumentDirection.AR && i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void)
-    .reduce((sum, i) => sum + convert(i.total, i.currency, displayCurrency), 0);
+  // All KPI and chart data is derived in a single useMemo so heavy filter+reduce
+  // chains run only when the underlying data or display settings actually change,
+  // not on every re-render triggered by any AppContext state update.
+  //
+  // convert() is intentionally inlined here (using settings.usdToSarRate directly)
+  // so the memo deps stay stable — the context-provided convert() reference
+  // changes every render and would defeat the memo.
+  const kpis = useMemo(() => {
+    const cvt = (amount: number, currency: Currency): number => {
+      if (currency === displayCurrency) return amount;
+      if (currency === Currency.USD && displayCurrency === Currency.SAR) return amount * settings.usdToSarRate;
+      if (currency === Currency.SAR && displayCurrency === Currency.USD) return amount / settings.usdToSarRate;
+      return amount;
+    };
 
-  const totalAP = invoices
-    .filter(i => i.direction === DocumentDirection.AP && i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void)
-    .reduce((sum, i) => sum + convert(i.total, i.currency, displayCurrency), 0);
+    // Current and previous calendar month keys (yyyy-MM)
+    const now = new Date();
+    const curMonth = format(now, 'yyyy-MM');
+    const prevD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonth = format(prevD, 'yyyy-MM');
 
-  const overdueAmount = invoices
-    .filter(i => i.status === DocumentStatus.Overdue)
-    .reduce((sum, i) => sum + convert(i.balance, i.currency, displayCurrency), 0);
+    // Sum invoices matching direction + date month + optional status filter.
+    // When statusFilter is omitted, excludes Draft and Void (standard reporting view).
+    const monthSum = (
+      dir: DocumentDirection,
+      monthKey: string,
+      statusFilter?: DocumentStatus
+    ): number =>
+      invoices
+        .filter(i =>
+          i.direction === dir &&
+          (statusFilter
+            ? i.status === statusFilter
+            : i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void) &&
+          (i.date ?? '').startsWith(monthKey)
+        )
+        .reduce((s, i) => s + cvt(i.total, i.currency), 0);
 
-  const overdueCount = invoices.filter(i => i.status === DocumentStatus.Overdue).length;
+    // ── All-time KPIs ─────────────────────────────────────────────────────────────────────
+    const totalAR = invoices
+      .filter(i => i.direction === DocumentDirection.AR && i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void)
+      .reduce((s, i) => s + cvt(i.total, i.currency), 0);
 
-  const paidAR = invoices
-    .filter(i => i.direction === DocumentDirection.AR && i.status === DocumentStatus.Paid)
-    .reduce((sum, i) => sum + convert(i.total, i.currency, displayCurrency), 0);
+    const totalAP = invoices
+      .filter(i => i.direction === DocumentDirection.AP && i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void)
+      .reduce((s, i) => s + cvt(i.total, i.currency), 0);
 
-  const paidAP = invoices
-    .filter(i => i.direction === DocumentDirection.AP && i.status === DocumentStatus.Paid)
-    .reduce((sum, i) => sum + convert(i.total, i.currency, displayCurrency), 0);
+    const overdueAmount = invoices
+      .filter(i => i.status === DocumentStatus.Overdue)
+      .reduce((s, i) => s + cvt(i.balance, i.currency), 0);
 
-  const cashPosition = paidAR - paidAP;
-  const activeProjects = projects.filter(p => p.status === ProjectStatus.Active).length;
-  const activeSubscriptions = subscriptions.filter(s => s.status === SubscriptionStatus.Active).length;
+    const overdueCount = invoices.filter(i => i.status === DocumentStatus.Overdue).length;
 
-  // --- Real Revenue Trend: last 6 months from actual invoices ---
-  const revenueTrendData = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - (5 - i));
-    const key = format(d, 'yyyy-MM');
-    const label = format(d, 'MMM');
-    const value = invoices
-      .filter(
-        inv =>
+    const paidAR = invoices
+      .filter(i => i.direction === DocumentDirection.AR && i.status === DocumentStatus.Paid)
+      .reduce((s, i) => s + cvt(i.total, i.currency), 0);
+    const paidAP = invoices
+      .filter(i => i.direction === DocumentDirection.AP && i.status === DocumentStatus.Paid)
+      .reduce((s, i) => s + cvt(i.total, i.currency), 0);
+    const cashPosition = paidAR - paidAP;
+
+    const activeProjects = projects.filter(p => p.status === ProjectStatus.Active).length;
+    const activeSubscriptions = subscriptions.filter(s => s.status === SubscriptionStatus.Active).length;
+
+    // ── Month-over-month trends ─────────────────────────────────────────────────────────
+    // Compare invoices dated in the current calendar month vs the previous one.
+    // Returns undefined when prev=0 so KpiCard can omit the badge cleanly.
+    const makeTrend = (cur: number, prev: number) => {
+      if (prev === 0) return undefined;
+      const pct = Math.round(Math.abs((cur - prev) / prev) * 100);
+      return { value: pct, direction: (cur >= prev ? 'up' : 'down') as 'up' | 'down' };
+    };
+
+    const arTrend   = makeTrend(monthSum(DocumentDirection.AR, curMonth), monthSum(DocumentDirection.AR, prevMonth));
+    const apTrend   = makeTrend(monthSum(DocumentDirection.AP, curMonth), monthSum(DocumentDirection.AP, prevMonth));
+    const thisCash  = monthSum(DocumentDirection.AR, curMonth, DocumentStatus.Paid) - monthSum(DocumentDirection.AP, curMonth, DocumentStatus.Paid);
+    const prevCash  = monthSum(DocumentDirection.AR, prevMonth, DocumentStatus.Paid) - monthSum(DocumentDirection.AP, prevMonth, DocumentStatus.Paid);
+    const cashTrend = makeTrend(thisCash, prevCash);
+    // Overdue is a point-in-time snapshot; month-over-month comparison is
+    // meaningless without a status-change history. No trend badge for it.
+
+    // ── Revenue trend chart (last 6 months, real data) ───────────────────────────────
+    const revenueTrendData = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      const key   = format(d, 'yyyy-MM');
+      const label = format(d, 'MMM');
+      const value = invoices
+        .filter(inv =>
           inv.direction === DocumentDirection.AR &&
           inv.status !== DocumentStatus.Draft &&
           inv.status !== DocumentStatus.Void &&
-          inv.date &&
-          inv.date.substring(0, 7) === key
-      )
-      .reduce((sum, inv) => sum + convert(inv.total, inv.currency, displayCurrency), 0);
-    return { name: label, value };
-  });
+          (inv.date ?? '').startsWith(key)
+        )
+        .reduce((sum, inv) => sum + cvt(inv.total, inv.currency), 0);
+      return { name: label, value };
+    });
 
-  // --- AR / AP Pie ---
-  const arApData = [
-    { name: t('الذمم المدينة', 'Receivables', lang), value: totalAR, color: '#4f46e5' },
-    { name: t('الذمم الدائنة', 'Payables', lang), value: totalAP, color: '#ef4444' },
-  ].filter(d => d.value > 0);
+    // ── AR / AP pie ─────────────────────────────────────────────────────────────────────────────
+    const arApData = [
+      { name: t('الذمم المدينة', 'Receivables', lang), value: totalAR, color: '#4f46e5' },
+      { name: t('الذمم الدائنة', 'Payables', lang),   value: totalAP, color: '#ef4444' },
+    ].filter(d => d.value > 0);
 
-  // --- Recent Invoices: sorted by most recently updated ---
-  const recentInvoices = [...invoices]
-    .sort((a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime())
-    .slice(0, 5);
+    // ── Recent invoices ───────────────────────────────────────────────────────────────────────
+    const recentInvoices = [...invoices]
+      .sort((a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime())
+      .slice(0, 5);
+
+    return {
+      totalAR, totalAP, overdueAmount, overdueCount, cashPosition,
+      activeProjects, activeSubscriptions,
+      arTrend, apTrend, cashTrend,
+      revenueTrendData, arApData, recentInvoices,
+    };
+  }, [invoices, projects, subscriptions, displayCurrency, settings.usdToSarRate, lang]);
+
+  const {
+    totalAR, totalAP, overdueAmount, overdueCount, cashPosition,
+    activeProjects, activeSubscriptions,
+    arTrend, apTrend, cashTrend,
+    revenueTrendData, arApData, recentInvoices,
+  } = kpis;
+
+  const trendLabel = t('مقارنة بالشهر الماضي', 'vs last month', lang);
 
   const getStatusBadgeClass = (status: DocumentStatus): string => {
     switch (status) {
@@ -160,35 +214,34 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPI Cards — 3 per row (2 rows) */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard
           title={t('إجمالي الذمم المدينة', 'Total Receivables', lang)}
           value={formatMoney(totalAR, displayCurrency)}
           icon={TrendingUp}
           color="indigo"
-          trend={{ value: 12, direction: 'up', label: t('مقارنة بالشهر الماضي', 'vs last month', lang) }}
+          trend={arTrend ? { ...arTrend, label: trendLabel } : undefined}
         />
         <KpiCard
           title={t('إجمالي الذمم الدائنة', 'Total Payables', lang)}
           value={formatMoney(totalAP, displayCurrency)}
           icon={FileText}
           color="rose"
-          trend={{ value: 4, direction: 'down', label: t('مقارنة بالشهر الماضي', 'vs last month', lang) }}
+          trend={apTrend ? { ...apTrend, label: trendLabel } : undefined}
         />
         <KpiCard
           title={t('المبالغ المتأخرة', 'Overdue Amount', lang)}
           value={formatMoney(overdueAmount, displayCurrency)}
           icon={AlertCircle}
           color="amber"
-          trend={{ value: 2.5, direction: 'up', label: t('مقارنة بالشهر الماضي', 'vs last month', lang) }}
         />
         <KpiCard
           title={t('الوضع النقدي', 'Cash Position', lang)}
           value={formatMoney(cashPosition, displayCurrency)}
           icon={DollarSign}
           color="green"
-          trend={{ value: 8, direction: 'up', label: t('مقارنة بالشهر الماضي', 'vs last month', lang) }}
+          trend={cashTrend ? { ...cashTrend, label: trendLabel } : undefined}
         />
         <KpiCard
           title={t('المشاريع النشطة', 'Active Projects', lang)}
@@ -204,7 +257,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts Section */}
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue Trend */}
         <div className="bg-white shadow-sm rounded-xl border border-slate-100 p-6">
@@ -221,33 +274,15 @@ export default function Dashboard() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis
-                dataKey="name"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#64748b', fontSize: 12 }}
-                dy={10}
-              />
-              <YAxis
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#64748b', fontSize: 12 }}
-                tickFormatter={(value: number) => formatMoney(value, displayCurrency)}
-                width={80}
-              />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }}
+                tickFormatter={(v: number) => formatMoney(v, displayCurrency)} width={80} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 itemStyle={{ color: '#1e293b' }}
-                formatter={(value: number) => [formatMoney(value, displayCurrency), t('الإيرادات', 'Revenue', lang)]}
+                formatter={(v: number) => [formatMoney(v, displayCurrency), t('الإيرادات', 'Revenue', lang)]}
               />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="#4f46e5"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorRevenue)"
-              />
+              <Area type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -262,22 +297,14 @@ export default function Dashboard() {
             <>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie
-                    data={arApData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={65}
-                    outerRadius={90}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
+                  <Pie data={arApData} cx="50%" cy="50%" innerRadius={65} outerRadius={90} paddingAngle={5} dataKey="value">
                     {arApData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip
                     contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value: number) => formatMoney(value, displayCurrency)}
+                    formatter={(v: number) => formatMoney(v, displayCurrency)}
                   />
                 </PieChart>
               </ResponsiveContainer>
