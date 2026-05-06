@@ -10,7 +10,8 @@ import {
   updateDoc, 
   deleteDoc, 
   writeBatch,
-  runTransaction
+  runTransaction,
+  Query
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db } from '../../../core/firebase';
@@ -193,48 +194,41 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { user } = usePlatform();
   const { asFinanceCounterparties } = useSharedClients();
 
-  // All eight Firestore collections are now real-time onSnapshot listeners.
-  //
-  // products / legalEntities / budgetCategories / settings were previously
-  // one-shot getDocs/getDoc fetches. Problems with one-shot fetches:
-  //   • Changes made in another browser session are invisible until page reload.
-  //   • Optimistic updates to products could diverge permanently on write failure
-  //     because the snapshot never re-reconciled.
-  //   • Settings changes required a reload to take effect app-wide.
-  //
-  // Listener dep is user?.uid so token refreshes do not restart subscriptions.
+  // All eight Firestore collections are real-time onSnapshot listeners.
+  // Dep is user?.uid so token refreshes do not restart subscriptions.
   useEffect(() => {
     if (!user) return;
 
-    const snap = <K extends keyof AppState>(
-      col: string,
-      key: K,
-      q: Parameters<typeof query>[0]
+    // snap() — DRY helper for collection listeners.
+    // q is typed as Query<any> (not Parameters<typeof query>[0]) to avoid
+    // TypeScript errors from the overloaded Firebase query() function signature.
+    // col is cast to keyof AppState['loading'] for the error handler — safe
+    // because every call site passes a valid loading-state key.
+    const snap = (
+      col: keyof AppState['loading'],
+      q: Query<any>
     ) =>
       onSnapshot(
         q,
-        s => dispatch({ type: 'SET_COLLECTION', collection: key, payload: s.docs.map(d => ({ id: d.id, ...d.data() })) }),
-        e => { console.error(`[${col}] snapshot error:`, e.code); dispatch({ type: 'SET_LOADING', collection: key as keyof AppState['loading'], isLoading: false }); }
+        s => dispatch({ type: 'SET_COLLECTION', collection: col as keyof AppState, payload: s.docs.map(d => ({ id: d.id, ...d.data() })) }),
+        e => { console.error(`[${col}] snapshot error:`, e.code); dispatch({ type: 'SET_LOADING', collection: col, isLoading: false }); }
       );
 
-    const unsubProjects       = snap('projects',        'projects',        query(collection(db, 'projects'),        orderBy('createdAt', 'desc')));
-    const unsubBilling        = snap('billingDocuments', 'billingDocuments', query(collection(db, 'billingDocuments'), orderBy('createdAt', 'desc')));
-    const unsubPayments       = snap('payments',         'payments',         query(collection(db, 'payments'),         orderBy('createdAt', 'desc')));
-    const unsubSubscriptions  = snap('subscriptions',    'subscriptions',    query(collection(db, 'subscriptions'),    orderBy('createdAt', 'desc')));
-    const unsubProducts       = snap('products',         'products',         query(collection(db, 'products'),         orderBy('name')));
-    const unsubLegalEntities  = snap('legalEntities',    'legalEntities',    query(collection(db, 'legalEntities'),    orderBy('name')));
-    const unsubBudgetCats     = snap('budgetCategories', 'budgetCategories', query(collection(db, 'budgetCategories'), orderBy('name')));
+    const unsubProjects       = snap('projects',        query(collection(db, 'projects'),        orderBy('createdAt', 'desc')));
+    const unsubBilling        = snap('billingDocuments', query(collection(db, 'billingDocuments'), orderBy('createdAt', 'desc')));
+    const unsubPayments       = snap('payments',         query(collection(db, 'payments'),         orderBy('createdAt', 'desc')));
+    const unsubSubscriptions  = snap('subscriptions',    query(collection(db, 'subscriptions'),    orderBy('createdAt', 'desc')));
+    const unsubProducts       = snap('products',         query(collection(db, 'products'),         orderBy('name')));
+    const unsubLegalEntities  = snap('legalEntities',    query(collection(db, 'legalEntities'),    orderBy('name')));
+    const unsubBudgetCats     = snap('budgetCategories', query(collection(db, 'budgetCategories'), orderBy('name')));
 
     // Settings is a single document — use doc-level onSnapshot.
     const unsubSettings = onSnapshot(
       doc(db, 'appSettings', 'config'),
       async docSnap => {
         if (docSnap.exists()) {
-          // Merge so new fields (e.g. vatRate) are always present for docs
-          // that pre-date those fields.
           dispatch({ type: 'SET_SETTINGS', payload: { ...INITIAL_SETTINGS, ...docSnap.data() } as AppSettings });
         } else {
-          // First run: bootstrap default settings.
           await setDoc(doc(db, 'appSettings', 'config'), INITIAL_SETTINGS);
           dispatch({ type: 'SET_SETTINGS', payload: INITIAL_SETTINGS });
         }
@@ -535,14 +529,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) { console.error(error); addToast('error', 'Billing job failed'); }
   };
 
+  // addCounterparty — extract id so the document path and id field are the same
+  // UUID. Previously called generateId() twice, producing two different values.
   const addCounterparty = async (cp: Omit<Counterparty, 'id' | 'createdAt'>) => {
-    try { await setDoc(doc(db, 'counterparties', generateId()), { ...cp, id: generateId(), createdAt: now() }); addToast('success', 'Counterparty added'); }
-    catch (error) { addToast('error', 'Failed to add counterparty'); }
+    try {
+      const id = generateId();
+      await setDoc(doc(db, 'counterparties', id), { ...cp, id, createdAt: now() });
+      addToast('success', 'Counterparty added');
+    } catch (error) { addToast('error', 'Failed to add counterparty'); }
   };
+
   const updateCounterparty = async (id: string, data: Partial<Counterparty>) => {
     try { await updateDoc(doc(db, 'counterparties', id), data); addToast('success', 'Counterparty updated'); }
     catch (error) { addToast('error', 'Failed to update counterparty'); }
   };
+
   const deleteCounterparty = async (id: string) => {
     try { await deleteDoc(doc(db, 'counterparties', id)); addToast('success', 'Counterparty deleted'); }
     catch (error) { addToast('error', 'Failed to delete counterparty'); }
