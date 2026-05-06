@@ -283,8 +283,15 @@ export interface Transaction {
 }
 
 export interface AppSettings {
+  // Exchange rates. sarToUsdRate is kept for backward-compat with existing
+  // Firestore documents but is NOT used in convert() — sarToUsdRate is always
+  // derived as 1 / usdToSarRate to prevent the two fields diverging.
   sarToUsdRate: number;
   usdToSarRate: number;
+  // VAT rate as a decimal (e.g. 0.15 = 15%). Used by completeMilestone and
+  // runBillingJob. Configurable via SettingsPage so it survives KSA rate changes
+  // without a code deploy.
+  vatRate: number;
   defaultWBSCategories: string[];
   companyName: string;
   defaultCurrency: Currency;
