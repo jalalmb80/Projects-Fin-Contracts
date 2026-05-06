@@ -14,8 +14,9 @@ import {
   getDoc,
   runTransaction
 } from 'firebase/firestore';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { db, auth } from '../../../core/firebase';
+import { User } from 'firebase/auth';
+import { db } from '../../../core/firebase';
+import { usePlatform } from '../../../core/context/PlatformContext';
 import { useSharedClients } from '../../../core/hooks/useSharedClients';
 import { 
   Project, 
@@ -41,9 +42,13 @@ import {
 import { INITIAL_SETTINGS } from '../constants';
 
 // --- State Definition ---
+// user is intentionally absent from AppState. It is sourced from PlatformContext
+// (which owns the single onAuthStateChanged listener for the whole app) and
+// injected into the context value directly. Keeping it in AppState created a
+// second onAuthStateChanged listener that re-subscribed all four Firestore
+// collections on every token refresh (~1 h).
 
 interface AppState {
-  user: User | null;
   projects: Project[];
   billingDocuments: BillingDocument[];
   payments: Payment[];
@@ -55,7 +60,6 @@ interface AppState {
   settings: AppSettings;
   displayCurrency: Currency;
   loading: {
-    auth: boolean;
     projects: boolean;
     billingDocuments: boolean;
     payments: boolean;
@@ -70,7 +74,6 @@ interface AppState {
 }
 
 const initialState: AppState = {
-  user: null,
   projects: [],
   billingDocuments: [],
   payments: [],
@@ -82,7 +85,6 @@ const initialState: AppState = {
   settings: INITIAL_SETTINGS,
   displayCurrency: INITIAL_SETTINGS.defaultCurrency,
   loading: {
-    auth: true,
     projects: true,
     billingDocuments: true,
     payments: true,
@@ -99,7 +101,6 @@ const initialState: AppState = {
 // --- Actions ---
 
 type AppAction =
-  | { type: 'SET_USER'; payload: User | null }
   | { type: 'SET_COLLECTION'; collection: keyof AppState; payload: any[] }
   | { type: 'SET_SETTINGS'; payload: AppSettings }
   | { type: 'SET_DISPLAY_CURRENCY'; payload: Currency }
@@ -111,8 +112,6 @@ type AppAction =
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case 'SET_USER':
-      return { ...state, user: action.payload, loading: { ...state.loading, auth: false } };
     case 'SET_COLLECTION':
       return { 
         ...state, 
@@ -149,6 +148,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
 // --- Context ---
 
 interface AppContextType extends AppState {
+  // user is sourced from PlatformContext, not AppState
+  user: User | null;
   addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
@@ -202,21 +203,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { addToast } = useToast();
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  // user comes from the platform-level PlatformContext which owns the single
+  // onAuthStateChanged listener. AppContext no longer needs its own.
+  const { user } = usePlatform();
+
   const { asFinanceCounterparties } = useSharedClients();
 
-  // Auth Listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      dispatch({ type: 'SET_USER', payload: user });
-    });
-    return unsubscribe;
-  }, []);
-
   // Data Listeners & Fetching.
-  // Depend on state.user?.uid (stable string) not state.user (object reference)
-  // so token refreshes (~1 h) do not re-create all four onSnapshot listeners.
+  // Dep is user?.uid (stable string). Token refreshes (~1 h) produce a new User
+  // object but the same UID, so no unnecessary re-subscription occurs.
   useEffect(() => {
-    if (!state.user) return;
+    if (!user) return;
 
     const unsubProjects = onSnapshot(
       query(collection(db, 'projects'), orderBy('createdAt', 'desc')),
@@ -267,8 +264,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         const settingsDoc = await getDoc(doc(db, 'appSettings', 'config'));
         if (settingsDoc.exists()) {
-          // Merge with INITIAL_SETTINGS so new fields (e.g. vatRate) are present
-          // for existing Firestore documents that pre-date this field.
           dispatch({ type: 'SET_SETTINGS', payload: { ...INITIAL_SETTINGS, ...settingsDoc.data() } as AppSettings });
         } else {
           await setDoc(doc(db, 'appSettings', 'config'), INITIAL_SETTINGS);
@@ -288,7 +283,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       unsubPayments();
       unsubSubscriptions();
     };
-  }, [state.user?.uid]);
+  }, [user?.uid]);
 
   // --- Helpers ---
 
@@ -366,7 +361,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      // Use the configured VAT rate from settings — never hard-code 0.15.
       const vat = state.settings.vatRate;
 
       const batch = writeBatch(db);
@@ -471,16 +465,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const markAsSent       = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Sent });
   const returnToDraft    = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Draft });
 
-  // voidDocument — atomically:
-  //   1. Resets invoice paidAmount=0, balance=total, status=Void.
-  //   2. For every payment that had an allocation against this invoice:
-  //      removes the allocation entry and returns the amount to unallocatedAmount.
-  // Previously this was a one-liner updateBillingDocument() that left stale
-  // paidAmount/balance and orphaned payment allocations.
   const voidDocument = async (id: string) => {
     try {
-      // Collect payment IDs from local state (used only to know which docs to
-      // read inside the transaction — fresh data is re-read atomically).
       const linkedPaymentIds = state.payments
         .filter(p => p.allocations.some(a => a.invoiceId === id))
         .map(p => p.id);
@@ -491,12 +477,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (!invoiceSnap.exists()) throw new Error('Invoice not found');
         const invoice = invoiceSnap.data() as BillingDocument;
 
-        // Read all linked payment docs inside the transaction for fresh data.
         const paymentSnaps = await Promise.all(
           linkedPaymentIds.map(pid => transaction.get(doc(db, 'payments', pid)))
         );
 
-        // Reset invoice to voided state.
         transaction.update(invoiceRef, {
           status: DocumentStatus.Void,
           paidAmount: 0,
@@ -504,7 +488,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           updatedAt: now(),
         });
 
-        // Reverse each payment’s allocation for this invoice.
         for (const paySnap of paymentSnaps) {
           if (!paySnap.exists()) continue;
           const payment = paySnap.data() as Payment;
@@ -523,7 +506,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) { console.error(error); addToast('error', 'Failed to void document'); }
   };
 
-  // recordPayment — returns new payment ID so callers can chain allocatePayment.
   const recordPayment = async (payment: Omit<Payment, 'id' | 'createdAt'>): Promise<string> => {
     const id = generateId();
     try {
@@ -536,8 +518,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // allocatePayment — Firestore transaction so concurrent allocations cannot
-  // both see the same unallocatedAmount and double-allocate.
   const allocatePayment = async (paymentId: string, invoiceId: string, amount: number) => {
     try {
       await runTransaction(db, async (transaction) => {
@@ -598,13 +578,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) { addToast('error', 'Failed to delete subscription'); }
   };
 
-  // runBillingJob fixes:
-  //   1. Uses settings.vatRate — no hardcoded 0.15.
-  //   2. Handles Custom billingCycle via billingInterval (days). Without this,
-  //      Custom subscriptions never advance nextInvoiceDate and regenerate
-  //      invoices on every subsequent job run.
-  //   3. Commits in batches of 100 subscriptions (200 Firestore writes each) to
-  //      stay under the 500-write-per-batch hard limit.
   const runBillingJob = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -618,12 +591,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      // Pre-build all invoice + subscription update pairs so we can chunk cleanly.
-      type JobItem = {
-        invoice: BillingDocument;
-        subId: string;
-        nextInvoiceDate: string;
-      };
+      type JobItem = { invoice: BillingDocument; subId: string; nextInvoiceDate: string; };
 
       const items: JobItem[] = dueSubscriptions.map(sub => {
         const invoiceId = generateId();
@@ -659,25 +627,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           subscriptionId: sub.id,
           currency: sub.currency,
           exchangeRate: 1,
-          lines,
-          subtotal,
-          taxTotal,
-          total,
-          balance: total,
-          paidAmount: 0,
+          lines, subtotal, taxTotal, total, balance: total, paidAmount: 0,
           taxProfile: TaxProfile.Standard,
-          createdAt: now(),
-          updatedAt: now(),
+          createdAt: now(), updatedAt: now(),
         };
 
-        return {
-          invoice,
-          subId: sub.id,
-          nextInvoiceDate: nextDate.toISOString().split('T')[0],
-        };
+        return { invoice, subId: sub.id, nextInvoiceDate: nextDate.toISOString().split('T')[0] };
       });
 
-      // Commit in chunks of 100 subscriptions (= 200 writes, well under 500 limit).
       const CHUNK = 100;
       let count = 0;
       for (let i = 0; i < items.length; i += CHUNK) {
@@ -685,11 +642,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const batch = writeBatch(db);
         for (const { invoice, subId, nextInvoiceDate } of chunk) {
           batch.set(doc(db, 'billingDocuments', invoice.id), invoice);
-          batch.update(doc(db, 'subscriptions', subId), {
-            lastInvoiceDate: today,
-            nextInvoiceDate,
-            updatedAt: now(),
-          });
+          batch.update(doc(db, 'subscriptions', subId), { lastInvoiceDate: today, nextInvoiceDate, updatedAt: now() });
           count++;
         }
         await batch.commit();
@@ -796,9 +749,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_DISPLAY_CURRENCY', payload: currency });
   };
 
-  // convert — sarToUsdRate is derived from usdToSarRate so the two values can
-  // never diverge. The sarToUsdRate field in AppSettings is kept for Firestore
-  // backward-compat but is not read here.
   const convert = (amount: number, from: Currency, to: Currency): number => {
     if (from === to) return amount;
     if (from === Currency.USD && to === Currency.SAR) return amount * state.settings.usdToSarRate;
@@ -813,8 +763,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }).format(converted);
   };
 
-  const value = {
+  const value: AppContextType = {
     ...state,
+    user,  // injected from PlatformContext, not from AppState
     counterparties: asFinanceCounterparties as unknown as Counterparty[],
     addProject, updateProject, deleteProject,
     addMilestone, updateMilestone, deleteMilestone, completeMilestone,
@@ -825,10 +776,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addProduct, updateProduct, softDeleteProduct,
     addLegalEntity, updateLegalEntity, deleteLegalEntity,
     addBudgetCategory, updateBudgetCategory, deleteBudgetCategory,
-    updateSettings,
-    setDisplayCurrency,
-    formatMoney,
-    convert,
+    updateSettings, setDisplayCurrency, formatMoney, convert,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
