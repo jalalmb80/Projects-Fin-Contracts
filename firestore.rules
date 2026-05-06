@@ -38,7 +38,14 @@ service cloud.firestore {
     match /products/{document=**}          { allow read, write: if isAuthenticated(); }
     match /legalEntities/{document=**}     { allow read, write: if isAuthenticated(); }
     match /budgetCategories/{document=**}  { allow read, write: if isAuthenticated(); }
-    match /transactions/{document=**}      { allow read, write: if isAuthenticated(); }
+
+    // transactions — create-only. These are immutable audit records written by
+    // issueDocument(). No authenticated user should be able to alter or delete
+    // them; doing so would corrupt the financial audit trail.
+    match /transactions/{document=**} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
 
     // invoiceCounter — field-restricted write. Prevents authenticated users
     // from resetting the sequence and causing duplicate invoice numbers.
@@ -68,6 +75,8 @@ service cloud.firestore {
     // ── CMS ─────────────────────────────────────────────────────────────────
 
     match /cms_contracts/{document=**}    { allow read, write: if isAuthenticated(); }
+    // cms_clients is a legacy collection superseded by shared_clients.
+    // No new writes go here; rule retained to avoid breaking any existing reads.
     match /cms_clients/{document=**}      { allow read, write: if isAuthenticated(); }
     match /cms_templates/{document=**}    { allow read, write: if isAuthenticated(); }
     match /cms_projects/{document=**}     { allow read, write: if isAuthenticated(); }
