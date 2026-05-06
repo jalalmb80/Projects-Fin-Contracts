@@ -51,6 +51,7 @@ export default function ProjectDetailPage() {
     addBudgetCategory,
     updateBudgetCategory,
     deleteBudgetCategory,
+    formatMoney,
     loading
   } = useApp();
 
@@ -98,14 +99,23 @@ export default function ProjectDetailPage() {
   const projectBudgetCategories = budgetCategories.filter(c => c.projectId === project.id);
 
   const totalBudget = projectBudgetCategories.reduce((sum, c) => sum + c.planned, 0);
-  const totalSpent = projectBudgetCategories.reduce((sum, c) => sum + c.actual, 0);
+  const totalSpent  = projectBudgetCategories.reduce((sum, c) => sum + c.actual, 0);
   const budgetProgress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
   const completedMilestones = project.milestones.filter(
     m => m.status === MilestoneStatus.Completed || m.status === MilestoneStatus.Invoiced
   ).length;
-  const totalMilestones = project.milestones.length;
+  const totalMilestones  = project.milestones.length;
   const milestoneProgress = totalMilestones > 0 ? (completedMilestones / totalMilestones) * 100 : 0;
+
+  // fmt — respects the user's display currency selection via formatMoney from
+  // useApp(). Previously this page had a local Intl formatter locked to
+  // project.baseCurrency; switching the Dashboard currency switcher had no
+  // effect here.
+  const fmt = (amount: number) => formatMoney(amount, project.baseCurrency);
+  // Document amounts use their own currency (may differ from project base).
+  const fmtDoc = (amount: number, currency: string) =>
+    formatMoney(amount, currency as any);
 
   const getStatusColor = (status: ProjectStatus): string => {
     switch (status) {
@@ -126,13 +136,6 @@ export default function ProjectDetailPage() {
       default:                         return 'bg-gray-100 text-gray-800';
     }
   };
-
-  const formatCurrency = (amount: number): string =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: project.baseCurrency,
-      maximumFractionDigits: 0
-    }).format(amount);
 
   // --- Milestone Handlers ---
   const handleOpenMilestoneModal = (milestone?: Milestone) => {
@@ -261,7 +264,7 @@ export default function ProjectDetailPage() {
           <div className="flex items-center space-x-4">
             <div className="text-right">
               <p className="text-sm text-gray-500">{t('قيمة العقد', 'Contract Value', lang)}</p>
-              <p className="text-xl font-bold text-gray-900">{formatCurrency(project.contractValue)}</p>
+              <p className="text-xl font-bold text-gray-900">{fmt(project.contractValue)}</p>
             </div>
           </div>
         </div>
@@ -294,7 +297,6 @@ export default function ProjectDetailPage() {
         {/* ── Overview Tab ── */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Metric Cards */}
             <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-5">
               {/* Budget */}
               <div className="bg-white overflow-hidden shadow rounded-lg p-5">
@@ -369,14 +371,14 @@ export default function ProjectDetailPage() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {projectBudgetCategories.map(item => {
                       const variance = item.planned - item.actual;
-                      const percent = item.planned > 0 ? (item.actual / item.planned) * 100 : 0;
+                      const percent  = item.planned > 0 ? (item.actual / item.planned) * 100 : 0;
                       return (
                         <tr key={item.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{formatCurrency(item.planned)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{formatCurrency(item.actual)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{fmt(item.planned)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{fmt(item.actual)}</td>
                           <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${variance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatCurrency(variance)}
+                            {fmt(variance)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap align-middle">
                             <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -435,7 +437,7 @@ export default function ProjectDetailPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {milestone.dueDate ? format(new Date(milestone.dueDate), 'MMM d, yyyy') : '—'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{formatCurrency(milestone.amount)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{fmt(milestone.amount)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{milestone.percentOfContract}%</td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getMilestoneStatusColor(milestone.status)}`}>
@@ -526,17 +528,17 @@ export default function ProjectDetailPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {projectBudgetCategories.map(item => {
                     const variance = item.planned - item.actual;
-                    const percent = item.planned > 0 ? (item.actual / item.planned) * 100 : 0;
+                    const percent  = item.planned > 0 ? (item.actual / item.planned) * 100 : 0;
                     return (
                       <tr key={item.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{item.name}</div>
                           {item.notes && <div className="text-xs text-gray-500">{item.notes}</div>}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{formatCurrency(item.planned)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{formatCurrency(item.actual)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{fmt(item.planned)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{fmt(item.actual)}</td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${variance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {formatCurrency(variance)}
+                          {fmt(variance)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap align-middle">
                           <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -566,10 +568,10 @@ export default function ProjectDetailPage() {
                   {projectBudgetCategories.length > 0 && (
                     <tr className="bg-gray-50 font-medium">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{t('المجموع', 'Total', lang)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{formatCurrency(totalBudget)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{formatCurrency(totalSpent)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{fmt(totalBudget)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{fmt(totalSpent)}</td>
                       <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${totalBudget - totalSpent < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatCurrency(totalBudget - totalSpent)}
+                        {fmt(totalBudget - totalSpent)}
                       </td>
                       <td className="px-6 py-4" />
                       <td className="px-6 py-4" />
@@ -629,7 +631,11 @@ export default function ProjectDetailPage() {
                           {tEnum(doc.status, lang)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{formatCurrency(doc.total)}</td>
+                      {/* Use fmtDoc so each document renders in its own currency,
+                          converted to the user's selected display currency. */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                        {fmtDoc(doc.total, doc.currency)}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <Link to={`/finance/billing/${doc.id}`} className="text-indigo-600 hover:text-indigo-900">
                           {t('عرض', 'View', lang)}
@@ -654,8 +660,7 @@ export default function ProjectDetailPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700">{t('الاسم', 'Name', lang)}</label>
             <input
-              type="text"
-              required
+              type="text" required
               value={milestoneForm.name || ''}
               onChange={e => setMilestoneForm({ ...milestoneForm, name: e.target.value })}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
@@ -673,8 +678,7 @@ export default function ProjectDetailPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700">{t('تاريخ الاستحقاق', 'Due Date', lang)}</label>
             <input
-              type="date"
-              required
+              type="date" required
               value={milestoneForm.dueDate || ''}
               onChange={e => setMilestoneForm({ ...milestoneForm, dueDate: e.target.value })}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
@@ -685,9 +689,7 @@ export default function ProjectDetailPage() {
               <label className="block text-sm font-medium text-gray-700">{t('% من العقد', '% of Contract', lang)}</label>
               <div className="mt-1 relative rounded-md shadow-sm">
                 <input
-                  type="number"
-                  min="0"
-                  max="100"
+                  type="number" min="0" max="100"
                   value={milestoneForm.percentOfContract || 0}
                   onChange={e => handleMilestonePercentChange(parseFloat(e.target.value) || 0)}
                   className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pr-8 sm:text-sm border-gray-300 rounded-md"
@@ -701,13 +703,13 @@ export default function ProjectDetailPage() {
               <label className="block text-sm font-medium text-gray-700">{t('المبلغ', 'Amount', lang)}</label>
               <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 sm:text-sm">$</span>
+                  <span className="text-gray-500 sm:text-sm">{project.baseCurrency}</span>
                 </div>
                 <input
                   type="number"
                   value={milestoneForm.amount || 0}
                   onChange={e => setMilestoneForm({ ...milestoneForm, amount: parseFloat(e.target.value) || 0 })}
-                  className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 sm:text-sm border-gray-300 rounded-md"
+                  className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
                 />
               </div>
             </div>
@@ -753,8 +755,7 @@ export default function ProjectDetailPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700">{t('اسم الفئة', 'Category Name', lang)}</label>
             <input
-              type="text"
-              required
+              type="text" required
               value={budgetForm.name || ''}
               onChange={e => setBudgetForm({ ...budgetForm, name: e.target.value })}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
@@ -764,13 +765,13 @@ export default function ProjectDetailPage() {
             <label className="block text-sm font-medium text-gray-700">{t('المبلغ المخطط', 'Planned Amount', lang)}</label>
             <div className="mt-1 relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-gray-500 sm:text-sm">$</span>
+                <span className="text-gray-500 sm:text-sm">{project.baseCurrency}</span>
               </div>
               <input
                 type="number"
                 value={budgetForm.planned || 0}
                 onChange={e => setBudgetForm({ ...budgetForm, planned: parseFloat(e.target.value) || 0 })}
-                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 sm:text-sm border-gray-300 rounded-md"
+                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
               />
             </div>
           </div>
@@ -778,14 +779,13 @@ export default function ProjectDetailPage() {
             <label className="block text-sm font-medium text-gray-700">{t('المبلغ الفعلي', 'Actual Amount', lang)}</label>
             <div className="mt-1 relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-gray-500 sm:text-sm">$</span>
+                <span className="text-gray-500 sm:text-sm">{project.baseCurrency}</span>
               </div>
               <input
-                type="number"
-                min="0"
+                type="number" min="0"
                 value={budgetForm.actual || 0}
                 onChange={e => setBudgetForm({ ...budgetForm, actual: parseFloat(e.target.value) || 0 })}
-                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 sm:text-sm border-gray-300 rounded-md"
+                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
               />
             </div>
           </div>
