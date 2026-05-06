@@ -9,9 +9,7 @@ import {
   setDoc, 
   updateDoc, 
   deleteDoc, 
-  writeBatch, 
-  getDocs,
-  getDoc,
+  writeBatch,
   runTransaction
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -41,12 +39,7 @@ import {
 } from '../types';
 import { INITIAL_SETTINGS } from '../constants';
 
-// --- State Definition ---
-// user is intentionally absent from AppState. It is sourced from PlatformContext
-// (which owns the single onAuthStateChanged listener for the whole app) and
-// injected into the context value directly. Keeping it in AppState created a
-// second onAuthStateChanged listener that re-subscribed all four Firestore
-// collections on every token refresh (~1 h).
+// --- State ---
 
 interface AppState {
   projects: Project[];
@@ -113,11 +106,7 @@ type AppAction =
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_COLLECTION':
-      return { 
-        ...state, 
-        [action.collection]: action.payload,
-        loading: { ...state.loading, [action.collection]: false }
-      };
+      return { ...state, [action.collection]: action.payload, loading: { ...state.loading, [action.collection]: false } };
     case 'SET_SETTINGS':
       return { ...state, settings: action.payload, loading: { ...state.loading, settings: false } };
     case 'SET_DISPLAY_CURRENCY':
@@ -131,7 +120,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'UPDATE_ITEM':
       return {
         ...state,
-        [action.collection]: (state[action.collection] as any[]).map(item => 
+        [action.collection]: (state[action.collection] as any[]).map(item =>
           item.id === action.payload.id ? { ...item, ...action.payload } : item
         )
       };
@@ -148,7 +137,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
 // --- Context ---
 
 interface AppContextType extends AppState {
-  // user is sourced from PlatformContext, not AppState
   user: User | null;
   addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
@@ -202,91 +190,65 @@ export const useApp = () => {
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { addToast } = useToast();
   const [state, dispatch] = useReducer(appReducer, initialState);
-
-  // user comes from the platform-level PlatformContext which owns the single
-  // onAuthStateChanged listener. AppContext no longer needs its own.
   const { user } = usePlatform();
-
   const { asFinanceCounterparties } = useSharedClients();
 
-  // Data Listeners & Fetching.
-  // Dep is user?.uid (stable string). Token refreshes (~1 h) produce a new User
-  // object but the same UID, so no unnecessary re-subscription occurs.
+  // All eight Firestore collections are now real-time onSnapshot listeners.
+  //
+  // products / legalEntities / budgetCategories / settings were previously
+  // one-shot getDocs/getDoc fetches. Problems with one-shot fetches:
+  //   • Changes made in another browser session are invisible until page reload.
+  //   • Optimistic updates to products could diverge permanently on write failure
+  //     because the snapshot never re-reconciled.
+  //   • Settings changes required a reload to take effect app-wide.
+  //
+  // Listener dep is user?.uid so token refreshes do not restart subscriptions.
   useEffect(() => {
     if (!user) return;
 
-    const unsubProjects = onSnapshot(
-      query(collection(db, 'projects'), orderBy('createdAt', 'desc')),
-      (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'projects', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
-      (error) => {
-        console.error('[projects] snapshot error:', error.code);
-        dispatch({ type: 'SET_LOADING', collection: 'projects', isLoading: false });
-      }
-    );
+    const snap = <K extends keyof AppState>(
+      col: string,
+      key: K,
+      q: Parameters<typeof query>[0]
+    ) =>
+      onSnapshot(
+        q,
+        s => dispatch({ type: 'SET_COLLECTION', collection: key, payload: s.docs.map(d => ({ id: d.id, ...d.data() })) }),
+        e => { console.error(`[${col}] snapshot error:`, e.code); dispatch({ type: 'SET_LOADING', collection: key as keyof AppState['loading'], isLoading: false }); }
+      );
 
-    const unsubBilling = onSnapshot(
-      query(collection(db, 'billingDocuments'), orderBy('createdAt', 'desc')),
-      (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'billingDocuments', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
-      (error) => {
-        console.error('[billingDocuments] snapshot error:', error.code);
-        dispatch({ type: 'SET_LOADING', collection: 'billingDocuments', isLoading: false });
-      }
-    );
+    const unsubProjects       = snap('projects',        'projects',        query(collection(db, 'projects'),        orderBy('createdAt', 'desc')));
+    const unsubBilling        = snap('billingDocuments', 'billingDocuments', query(collection(db, 'billingDocuments'), orderBy('createdAt', 'desc')));
+    const unsubPayments       = snap('payments',         'payments',         query(collection(db, 'payments'),         orderBy('createdAt', 'desc')));
+    const unsubSubscriptions  = snap('subscriptions',    'subscriptions',    query(collection(db, 'subscriptions'),    orderBy('createdAt', 'desc')));
+    const unsubProducts       = snap('products',         'products',         query(collection(db, 'products'),         orderBy('name')));
+    const unsubLegalEntities  = snap('legalEntities',    'legalEntities',    query(collection(db, 'legalEntities'),    orderBy('name')));
+    const unsubBudgetCats     = snap('budgetCategories', 'budgetCategories', query(collection(db, 'budgetCategories'), orderBy('name')));
 
-    const unsubPayments = onSnapshot(
-      query(collection(db, 'payments'), orderBy('createdAt', 'desc')),
-      (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'payments', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
-      (error) => {
-        console.error('[payments] snapshot error:', error.code);
-        dispatch({ type: 'SET_LOADING', collection: 'payments', isLoading: false });
-      }
-    );
-
-    const unsubSubscriptions = onSnapshot(
-      query(collection(db, 'subscriptions'), orderBy('createdAt', 'desc')),
-      (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'subscriptions', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
-      (error) => {
-        console.error('[subscriptions] snapshot error:', error.code);
-        dispatch({ type: 'SET_LOADING', collection: 'subscriptions', isLoading: false });
-      }
-    );
-
-    const fetchOneTimeData = async () => {
-      try {
-        const productsSnap = await getDocs(query(collection(db, 'products'), orderBy('name')));
-        dispatch({ type: 'SET_COLLECTION', collection: 'products', payload: productsSnap.docs.map(d => ({ id: d.id, ...d.data() })) });
-
-        const legalEntitiesSnap = await getDocs(query(collection(db, 'legalEntities'), orderBy('name')));
-        dispatch({ type: 'SET_COLLECTION', collection: 'legalEntities', payload: legalEntitiesSnap.docs.map(d => ({ id: d.id, ...d.data() })) });
-
-        const budgetCategoriesSnap = await getDocs(query(collection(db, 'budgetCategories'), orderBy('name')));
-        dispatch({ type: 'SET_COLLECTION', collection: 'budgetCategories', payload: budgetCategoriesSnap.docs.map(d => ({ id: d.id, ...d.data() })) });
-
-        const settingsDoc = await getDoc(doc(db, 'appSettings', 'config'));
-        if (settingsDoc.exists()) {
-          dispatch({ type: 'SET_SETTINGS', payload: { ...INITIAL_SETTINGS, ...settingsDoc.data() } as AppSettings });
+    // Settings is a single document — use doc-level onSnapshot.
+    const unsubSettings = onSnapshot(
+      doc(db, 'appSettings', 'config'),
+      async docSnap => {
+        if (docSnap.exists()) {
+          // Merge so new fields (e.g. vatRate) are always present for docs
+          // that pre-date those fields.
+          dispatch({ type: 'SET_SETTINGS', payload: { ...INITIAL_SETTINGS, ...docSnap.data() } as AppSettings });
         } else {
+          // First run: bootstrap default settings.
           await setDoc(doc(db, 'appSettings', 'config'), INITIAL_SETTINGS);
           dispatch({ type: 'SET_SETTINGS', payload: INITIAL_SETTINGS });
         }
-      } catch (error) {
-        console.error('Error fetching initial data:', error);
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to load application data.' });
-      }
-    };
-
-    fetchOneTimeData();
+      },
+      e => { console.error('[settings] snapshot error:', e.code); dispatch({ type: 'SET_LOADING', collection: 'settings', isLoading: false }); }
+    );
 
     return () => {
-      unsubProjects();
-      unsubBilling();
-      unsubPayments();
-      unsubSubscriptions();
+      unsubProjects(); unsubBilling(); unsubPayments(); unsubSubscriptions();
+      unsubProducts(); unsubLegalEntities(); unsubBudgetCats(); unsubSettings();
     };
   }, [user?.uid]);
 
   // --- Helpers ---
-
   const generateId = () => crypto.randomUUID();
   const now = () => new Date().toISOString();
 
@@ -319,9 +281,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
       const newMilestone = { ...milestone, id: generateId(), projectId };
-      await updateDoc(doc(db, 'projects', projectId), { 
-        milestones: [...project.milestones, newMilestone], updatedAt: now()
-      });
+      await updateDoc(doc(db, 'projects', projectId), { milestones: [...project.milestones, newMilestone], updatedAt: now() });
       addToast('success', 'Milestone added');
     } catch (error) { addToast('error', 'Failed to add milestone'); }
   };
@@ -330,9 +290,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
-      await updateDoc(doc(db, 'projects', projectId), { 
-        milestones: project.milestones.map(m => m.id === milestoneId ? { ...m, ...data } : m),
-        updatedAt: now()
+      await updateDoc(doc(db, 'projects', projectId), {
+        milestones: project.milestones.map(m => m.id === milestoneId ? { ...m, ...data } : m), updatedAt: now()
       });
       addToast('success', 'Milestone updated');
     } catch (error) { addToast('error', 'Failed to update milestone'); }
@@ -342,7 +301,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
-      await updateDoc(doc(db, 'projects', projectId), { 
+      await updateDoc(doc(db, 'projects', projectId), {
         milestones: project.milestones.filter(m => m.id !== milestoneId), updatedAt: now()
       });
       addToast('success', 'Milestone deleted');
@@ -355,57 +314,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (!project) throw new Error('Project not found');
       const milestone = project.milestones.find(m => m.id === milestoneId);
       if (!milestone) throw new Error('Milestone not found');
-
-      if (milestone.status === MilestoneStatus.Invoiced) {
-        addToast('success', 'Milestone already invoiced');
-        return;
-      }
+      if (milestone.status === MilestoneStatus.Invoiced) { addToast('success', 'Milestone already invoiced'); return; }
 
       const vat = state.settings.vatRate;
-
       const batch = writeBatch(db);
       const invoiceId = generateId();
       batch.update(doc(db, 'projects', projectId), {
-        milestones: project.milestones.map(m => 
-          m.id === milestoneId
-            ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId }
-            : m
-        ),
-        updatedAt: now()
+        milestones: project.milestones.map(m =>
+          m.id === milestoneId ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId } : m
+        ), updatedAt: now()
       });
       const lineItem: BillingLineItem = {
-        id: generateId(),
-        description: `Milestone: ${milestone.name}`,
-        quantity: 1,
-        unitPrice: milestone.amount,
-        taxCode: TaxProfile.Standard,
-        taxAmount: milestone.amount * vat,
-        subtotal: milestone.amount,
-        total: milestone.amount * (1 + vat),
-        milestoneId: milestone.id,
+        id: generateId(), description: `Milestone: ${milestone.name}`, quantity: 1,
+        unitPrice: milestone.amount, taxCode: TaxProfile.Standard,
+        taxAmount: milestone.amount * vat, subtotal: milestone.amount,
+        total: milestone.amount * (1 + vat), milestoneId: milestone.id,
       };
       const newInvoice: BillingDocument = {
-        id: invoiceId,
-        type: DocumentType.Invoice,
-        direction: DocumentDirection.AR,
-        status: DocumentStatus.Draft,
-        date: now().split('T')[0],
+        id: invoiceId, type: DocumentType.Invoice, direction: DocumentDirection.AR,
+        status: DocumentStatus.Draft, date: now().split('T')[0],
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         counterpartyId: project.clientId,
         counterpartyName: asFinanceCounterparties.find(c => c.id === project.clientId)?.name || 'Unknown',
-        projectId: project.id,
-        milestoneId: milestone.id,
-        currency: project.baseCurrency,
-        exchangeRate: 1,
-        lines: [lineItem],
-        subtotal: lineItem.subtotal,
-        taxTotal: lineItem.taxAmount,
-        total: lineItem.total,
-        balance: lineItem.total,
-        paidAmount: 0,
-        taxProfile: TaxProfile.Standard,
-        createdAt: now(),
-        updatedAt: now(),
+        projectId: project.id, milestoneId: milestone.id,
+        currency: project.baseCurrency, exchangeRate: 1, lines: [lineItem],
+        subtotal: lineItem.subtotal, taxTotal: lineItem.taxAmount,
+        total: lineItem.total, balance: lineItem.total, paidAmount: 0,
+        taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now(),
       };
       batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
       await batch.commit();
@@ -470,30 +405,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const linkedPaymentIds = state.payments
         .filter(p => p.allocations.some(a => a.invoiceId === id))
         .map(p => p.id);
-
       await runTransaction(db, async (transaction) => {
-        const invoiceRef = doc(db, 'billingDocuments', id);
+        const invoiceRef  = doc(db, 'billingDocuments', id);
         const invoiceSnap = await transaction.get(invoiceRef);
         if (!invoiceSnap.exists()) throw new Error('Invoice not found');
         const invoice = invoiceSnap.data() as BillingDocument;
-
-        const paymentSnaps = await Promise.all(
-          linkedPaymentIds.map(pid => transaction.get(doc(db, 'payments', pid)))
-        );
-
-        transaction.update(invoiceRef, {
-          status: DocumentStatus.Void,
-          paidAmount: 0,
-          balance: invoice.total,
-          updatedAt: now(),
-        });
-
+        const paymentSnaps = await Promise.all(linkedPaymentIds.map(pid => transaction.get(doc(db, 'payments', pid))));
+        transaction.update(invoiceRef, { status: DocumentStatus.Void, paidAmount: 0, balance: invoice.total, updatedAt: now() });
         for (const paySnap of paymentSnaps) {
           if (!paySnap.exists()) continue;
           const payment = paySnap.data() as Payment;
-          const reversed = payment.allocations
-            .filter(a => a.invoiceId === id)
-            .reduce((sum, a) => sum + a.amount, 0);
+          const reversed = payment.allocations.filter(a => a.invoiceId === id).reduce((s, a) => s + a.amount, 0);
           if (reversed === 0) continue;
           transaction.update(paySnap.ref, {
             allocations: payment.allocations.filter(a => a.invoiceId !== id),
@@ -501,7 +423,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           });
         }
       });
-
       addToast('success', 'Document voided');
     } catch (error) { console.error(error); addToast('error', 'Failed to void document'); }
   };
@@ -512,45 +433,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       await setDoc(doc(db, 'payments', id), { ...payment, id, createdAt: now() });
       addToast('success', 'Payment recorded');
       return id;
-    } catch (error) {
-      addToast('error', 'Failed to record payment');
-      throw error;
-    }
+    } catch (error) { addToast('error', 'Failed to record payment'); throw error; }
   };
 
   const allocatePayment = async (paymentId: string, invoiceId: string, amount: number) => {
     try {
       await runTransaction(db, async (transaction) => {
-        const paymentRef = doc(db, 'payments', paymentId);
-        const invoiceRef = doc(db, 'billingDocuments', invoiceId);
+        const paymentRef  = doc(db, 'payments', paymentId);
+        const invoiceRef  = doc(db, 'billingDocuments', invoiceId);
         const paymentSnap = await transaction.get(paymentRef);
         const invoiceSnap = await transaction.get(invoiceRef);
         if (!paymentSnap.exists()) throw new Error('Payment not found');
         if (!invoiceSnap.exists()) throw new Error('Invoice not found');
         const payment = paymentSnap.data() as Payment;
-        const invoice = invoiceSnap.data() as BillingDocument;
-
+        const invoice  = invoiceSnap.data() as BillingDocument;
         const unallocated = payment.unallocatedAmount ?? 0;
         if (unallocated < amount) throw new Error('Insufficient unallocated amount');
-        if (invoice.balance < amount) throw new Error('Allocation amount exceeds invoice balance');
-
+        if (invoice.balance  < amount) throw new Error('Allocation amount exceeds invoice balance');
         const newAllocation = { id: generateId(), paymentId, invoiceId, amount, date: now() };
-        transaction.update(paymentRef, {
-          allocations: [...(payment.allocations || []), newAllocation],
-          unallocatedAmount: unallocated - amount,
-        });
-
+        transaction.update(paymentRef, { allocations: [...(payment.allocations || []), newAllocation], unallocatedAmount: unallocated - amount });
         const newPaidAmount = (invoice.paidAmount ?? 0) + amount;
-        const newBalance = invoice.total - newPaidAmount;
-        let newStatus = invoice.status;
+        const newBalance    = invoice.total - newPaidAmount;
+        let   newStatus     = invoice.status;
         if (newBalance <= 0) newStatus = DocumentStatus.Paid;
         else if (newPaidAmount > 0) newStatus = DocumentStatus.PartiallyPaid;
-        transaction.update(invoiceRef, {
-          paidAmount: newPaidAmount,
-          balance: newBalance,
-          status: newStatus,
-          updatedAt: now(),
-        });
+        transaction.update(invoiceRef, { paidAmount: newPaidAmount, balance: newBalance, status: newStatus, updatedAt: now() });
       });
       addToast('success', 'Payment allocated');
     } catch (error) { console.error(error); addToast('error', 'Failed to allocate payment'); }
@@ -565,73 +472,50 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateSubscription = async (id: string, data: Partial<Subscription>) => {
-    try {
-      await updateDoc(doc(db, 'subscriptions', id), { ...data, updatedAt: now() });
-      addToast('success', 'Subscription updated');
-    } catch (error) { addToast('error', 'Failed to update subscription'); }
+    try { await updateDoc(doc(db, 'subscriptions', id), { ...data, updatedAt: now() }); addToast('success', 'Subscription updated'); }
+    catch (error) { addToast('error', 'Failed to update subscription'); }
   };
 
   const deleteSubscription = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'subscriptions', id));
-      addToast('success', 'Subscription deleted');
-    } catch (error) { addToast('error', 'Failed to delete subscription'); }
+    try { await deleteDoc(doc(db, 'subscriptions', id)); addToast('success', 'Subscription deleted'); }
+    catch (error) { addToast('error', 'Failed to delete subscription'); }
   };
 
   const runBillingJob = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const vat = state.settings.vatRate;
-
-      const dueSubscriptions = state.subscriptions.filter(s =>
-        s.status === SubscriptionStatus.Active && s.nextInvoiceDate <= today
-      );
-      if (dueSubscriptions.length === 0) {
-        addToast('success', 'No subscriptions due for billing');
-        return;
-      }
+      const vat   = state.settings.vatRate;
+      const dueSubscriptions = state.subscriptions.filter(s => s.status === SubscriptionStatus.Active && s.nextInvoiceDate <= today);
+      if (dueSubscriptions.length === 0) { addToast('success', 'No subscriptions due for billing'); return; }
 
       type JobItem = { invoice: BillingDocument; subId: string; nextInvoiceDate: string; };
-
       const items: JobItem[] = dueSubscriptions.map(sub => {
         const invoiceId = generateId();
         const lines: BillingLineItem[] = sub.items.map(item => ({
-          id: generateId(),
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          taxCode: item.taxCode,
+          id: generateId(), description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, taxCode: item.taxCode,
           taxAmount: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? vat : 0),
           subtotal: item.quantity * item.unitPrice,
-          total: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 1 + vat : 1),
+          total:    (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 1 + vat : 1),
         }));
         const subtotal = lines.reduce((s, l) => s + l.subtotal, 0);
         const taxTotal = lines.reduce((s, l) => s + l.taxAmount, 0);
-        const total = subtotal + taxTotal;
-
+        const total    = subtotal + taxTotal;
         const nextDate = new Date(sub.nextInvoiceDate);
-        if (sub.billingCycle === 'Monthly')        nextDate.setMonth(nextDate.getMonth() + 1);
+        if      (sub.billingCycle === 'Monthly')   nextDate.setMonth(nextDate.getMonth() + 1);
         else if (sub.billingCycle === 'Quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
         else if (sub.billingCycle === 'Yearly')    nextDate.setFullYear(nextDate.getFullYear() + 1);
         else if (sub.billingCycle === 'Custom')    nextDate.setDate(nextDate.getDate() + (sub.billingInterval ?? 30));
-
         const invoice: BillingDocument = {
-          id: invoiceId,
-          type: DocumentType.Invoice,
+          id: invoiceId, type: DocumentType.Invoice,
           direction: sub.direction === 'AR' ? DocumentDirection.AR : DocumentDirection.AP,
-          status: DocumentStatus.Draft,
-          date: today,
+          status: DocumentStatus.Draft, date: today,
           dueDate: new Date(Date.now() + sub.paymentTermsDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           counterpartyId: sub.counterpartyId,
           counterpartyName: asFinanceCounterparties.find(c => c.id === sub.counterpartyId)?.name || 'Unknown',
-          subscriptionId: sub.id,
-          currency: sub.currency,
-          exchangeRate: 1,
+          subscriptionId: sub.id, currency: sub.currency, exchangeRate: 1,
           lines, subtotal, taxTotal, total, balance: total, paidAmount: 0,
-          taxProfile: TaxProfile.Standard,
-          createdAt: now(), updatedAt: now(),
+          taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now(),
         };
-
         return { invoice, subId: sub.id, nextInvoiceDate: nextDate.toISOString().split('T')[0] };
       });
 
@@ -647,91 +531,61 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         await batch.commit();
       }
-
       addToast('success', `Billing job completed. Generated ${count} invoices.`);
     } catch (error) { console.error(error); addToast('error', 'Billing job failed'); }
   };
 
   const addCounterparty = async (cp: Omit<Counterparty, 'id' | 'createdAt'>) => {
-    try {
-      const id = generateId();
-      await setDoc(doc(db, 'counterparties', id), { ...cp, id, createdAt: now() });
-      addToast('success', 'Counterparty added');
-    } catch (error) { addToast('error', 'Failed to add counterparty'); }
+    try { await setDoc(doc(db, 'counterparties', generateId()), { ...cp, id: generateId(), createdAt: now() }); addToast('success', 'Counterparty added'); }
+    catch (error) { addToast('error', 'Failed to add counterparty'); }
   };
-
   const updateCounterparty = async (id: string, data: Partial<Counterparty>) => {
-    try {
-      await updateDoc(doc(db, 'counterparties', id), data);
-      addToast('success', 'Counterparty updated');
-    } catch (error) { addToast('error', 'Failed to update counterparty'); }
+    try { await updateDoc(doc(db, 'counterparties', id), data); addToast('success', 'Counterparty updated'); }
+    catch (error) { addToast('error', 'Failed to update counterparty'); }
   };
-
   const deleteCounterparty = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'counterparties', id));
-      addToast('success', 'Counterparty deleted');
-    } catch (error) { addToast('error', 'Failed to delete counterparty'); }
+    try { await deleteDoc(doc(db, 'counterparties', id)); addToast('success', 'Counterparty deleted'); }
+    catch (error) { addToast('error', 'Failed to delete counterparty'); }
   };
 
   const addProduct = async (product: Omit<Product, 'id' | 'createdAt'>) => {
     const id = generateId();
     const newProduct = { ...product, id, createdAt: now() };
     dispatch({ type: 'ADD_ITEM', collection: 'products', payload: newProduct });
-    try {
-      await setDoc(doc(db, 'products', id), newProduct);
-      addToast('success', 'Product added');
-    } catch (error) {
-      dispatch({ type: 'DELETE_ITEM', collection: 'products', id });
-      addToast('error', 'Failed to add product');
-    }
+    try { await setDoc(doc(db, 'products', id), newProduct); addToast('success', 'Product added'); }
+    catch (error) { dispatch({ type: 'DELETE_ITEM', collection: 'products', id }); addToast('error', 'Failed to add product'); }
   };
 
   const updateProduct = async (id: string, data: Partial<Product>) => {
     const original = state.products.find(p => p.id === id);
     dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: { id, ...data } });
-    try {
-      await updateDoc(doc(db, 'products', id), data);
-      addToast('success', 'Product updated');
-    } catch (error) {
-      if (original) dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: original });
-      addToast('error', 'Failed to update product');
-    }
+    try { await updateDoc(doc(db, 'products', id), data); addToast('success', 'Product updated'); }
+    catch (error) { if (original) dispatch({ type: 'UPDATE_ITEM', collection: 'products', payload: original }); addToast('error', 'Failed to update product'); }
   };
 
   const softDeleteProduct = async (id: string) => updateProduct(id, { active: false });
 
   const addLegalEntity = async (entity: Omit<LegalEntity, 'id'>) => {
-    try {
-      const id = generateId();
-      await setDoc(doc(db, 'legalEntities', id), { ...entity, id });
-      addToast('success', 'Legal entity added');
-    } catch (error) { addToast('error', 'Failed to add legal entity'); }
+    try { const id = generateId(); await setDoc(doc(db, 'legalEntities', id), { ...entity, id }); addToast('success', 'Legal entity added'); }
+    catch (error) { addToast('error', 'Failed to add legal entity'); }
   };
-
   const updateLegalEntity = async (id: string, data: Partial<LegalEntity>) => {
     try { await updateDoc(doc(db, 'legalEntities', id), data); addToast('success', 'Legal entity updated'); }
     catch (error) { addToast('error', 'Failed to update legal entity'); }
   };
-
   const deleteLegalEntity = async (id: string) => {
     try { await deleteDoc(doc(db, 'legalEntities', id)); addToast('success', 'Legal entity deleted'); }
     catch (error) { addToast('error', 'Failed to delete legal entity'); }
   };
 
   const addBudgetCategory = async (category: Omit<BudgetCategory, 'id'>) => {
-    try {
-      const id = generateId();
-      await setDoc(doc(db, 'budgetCategories', id), { ...category, id });
-      addToast('success', 'Budget category added');
-    } catch (error) { addToast('error', 'Failed to add budget category'); }
+    try { const id = generateId(); await setDoc(doc(db, 'budgetCategories', id), { ...category, id }); addToast('success', 'Budget category added'); }
+    catch (error) { addToast('error', 'Failed to add budget category'); }
   };
-
   const updateBudgetCategory = async (id: string, data: Partial<BudgetCategory>) => {
     try { await updateDoc(doc(db, 'budgetCategories', id), data); addToast('success', 'Budget category updated'); }
     catch (error) { addToast('error', 'Failed to update budget category'); }
   };
-
   const deleteBudgetCategory = async (id: string) => {
     try { await deleteDoc(doc(db, 'budgetCategories', id)); addToast('success', 'Budget category deleted'); }
     catch (error) { addToast('error', 'Failed to delete budget category'); }
@@ -739,15 +593,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const updateSettings = async (settings: Partial<AppSettings>) => {
     const original = state.settings;
-    const newSettings = { ...original, ...settings };
-    dispatch({ type: 'SET_SETTINGS', payload: newSettings });
+    dispatch({ type: 'SET_SETTINGS', payload: { ...original, ...settings } });
     try { await updateDoc(doc(db, 'appSettings', 'config'), settings); addToast('success', 'Settings updated'); }
     catch (error) { dispatch({ type: 'SET_SETTINGS', payload: original }); addToast('error', 'Failed to update settings'); }
   };
 
-  const setDisplayCurrency = (currency: Currency) => {
-    dispatch({ type: 'SET_DISPLAY_CURRENCY', payload: currency });
-  };
+  const setDisplayCurrency = (currency: Currency) => dispatch({ type: 'SET_DISPLAY_CURRENCY', payload: currency });
 
   const convert = (amount: number, from: Currency, to: Currency): number => {
     if (from === to) return amount;
@@ -758,14 +609,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const formatMoney = (amount: number, fromCurrency: Currency = state.settings.defaultCurrency): string => {
     const converted = convert(amount, fromCurrency, state.displayCurrency);
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency', currency: state.displayCurrency, maximumFractionDigits: 0
-    }).format(converted);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: state.displayCurrency, maximumFractionDigits: 0 }).format(converted);
   };
 
   const value: AppContextType = {
     ...state,
-    user,  // injected from PlatformContext, not from AppState
+    user,
     counterparties: asFinanceCounterparties as unknown as Counterparty[],
     addProject, updateProject, deleteProject,
     addMilestone, updateMilestone, deleteMilestone, completeMilestone,
