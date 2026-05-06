@@ -10,14 +10,10 @@ import {
 } from '../types';
 import { 
   ChevronLeft, 
-  Printer, 
-  Mail, 
-  Download, 
   CreditCard, 
   CheckCircle, 
   AlertCircle,
   FileText,
-  Trash2,
   Edit2,
   Send,
   XCircle
@@ -39,7 +35,7 @@ export default function BillingDetailPage() {
     voidDocument,
     returnToDraft,
     recordPayment,
-    updateBillingDocument,
+    allocatePayment,
     loading
   } = useApp();
 
@@ -74,6 +70,8 @@ export default function BillingDetailPage() {
   const fromEntity = legalEntities.find(e => e.id === document.fromEntityId);
   const toEntity = legalEntities.find(e => e.id === document.toEntityId);
 
+  // Payment History: built from allocations[] so it stays in sync with
+  // allocatePayment() which is the single source of truth for paidAmount/balance.
   const relatedPayments = payments.flatMap(p => 
     p.allocations
       .filter(a => a.invoiceId === document.id)
@@ -107,15 +105,20 @@ export default function BillingDetailPage() {
     }).format(amount);
   };
 
+  // recordPayment creates the Payment document (with unallocatedAmount set to
+  // the full payment amount) and returns the new payment ID. allocatePayment
+  // then runs a Firestore transaction that atomically deducts from
+  // unallocatedAmount, increments invoice.paidAmount, updates invoice.balance,
+  // and sets the correct status. This eliminates the TOCTOU race that existed
+  // when paidAmount/balance were updated from stale React state after the fact.
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentAmount <= 0 || paymentAmount > document.balance) {
       addToast('error', 'Invalid payment amount');
       return;
     }
-
     try {
-      await recordPayment({
+      const paymentId = await recordPayment({
         date: paymentDate,
         amount: paymentAmount,
         currency: document.currency,
@@ -124,19 +127,9 @@ export default function BillingDetailPage() {
         method: paymentMethod,
         reference: paymentReference,
         allocations: [],
-        unallocatedAmount: 0
+        unallocatedAmount: paymentAmount,
       });
-
-      const newPaidAmount = document.paidAmount + paymentAmount;
-      const newBalance = document.total - newPaidAmount;
-      const newStatus = newBalance <= 0 ? DocumentStatus.Paid : DocumentStatus.PartiallyPaid;
-
-      await updateBillingDocument(document.id, {
-        paidAmount: newPaidAmount,
-        balance: newBalance,
-        status: newStatus
-      });
-
+      await allocatePayment(paymentId, document.id, paymentAmount);
       setIsPaymentModalOpen(false);
     } catch (error) {
       console.error('Payment failed', error);
@@ -174,7 +167,10 @@ export default function BillingDetailPage() {
                 <button onClick={() => submitForApproval(document.id)} className="btn-secondary text-sm px-3 py-2 border rounded hover:bg-gray-50">
                   Submit for Approval
                 </button>
-                <button className="btn-secondary text-sm px-3 py-2 border rounded hover:bg-gray-50 flex items-center">
+                <button
+                  onClick={() => navigate(`/finance/billing/new?id=${document.id}`)}
+                  className="btn-secondary text-sm px-3 py-2 border rounded hover:bg-gray-50 flex items-center"
+                >
                   <Edit2 className="h-4 w-4 mr-1" /> Edit
                 </button>
               </>
