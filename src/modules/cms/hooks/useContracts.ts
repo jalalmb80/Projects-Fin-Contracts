@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   collection, onSnapshot, query, orderBy,
-  doc, setDoc, updateDoc, deleteDoc,
+  doc, setDoc, updateDoc, deleteDoc, arrayUnion,
 } from 'firebase/firestore';
 import { db } from '../../../core/firebase';
 import { Contract, Client, ContractTemplate, Project, WorkflowEvent } from '../types';
@@ -59,27 +59,29 @@ export function useContracts() {
     deleteDoc(doc(db, 'cms_contracts', id));
 
   /**
-   * addWorkflowEvent — atomic single updateDoc.
+   * addWorkflowEvent — uses Firestore arrayUnion so concurrent writes from
+   * different users never overwrite each other’s events.
    *
-   * Prepends `event` to workflow_events (newest first).
-   * If `newStatus` is supplied, also updates contract.status in the same write.
-   * Never reads from Firestore — uses the in-memory contracts array.
+   * Previous implementation read workflow_events from in-memory React state
+   * and spread a new array into updateDoc. Under concurrent edits both writers
+   * would see the same base array and one event would be silently lost.
+   *
+   * arrayUnion appends atomically at the server; if newStatus is supplied it
+   * is written in the same single updateDoc call.
    */
   const addWorkflowEvent = async (
     contractId: string,
     event: WorkflowEvent,
     newStatus?: string,
   ) => {
-    const contract = contracts.find(c => c.id === contractId);
-    const existing = contract?.workflow_events ?? [];
-    const patch: Partial<Contract> = {
-      workflow_events: [event, ...existing],
+    const patch: Record<string, any> = {
+      workflow_events: arrayUnion(event),
     };
     if (newStatus !== undefined) patch.status = newStatus;
-    await updateDoc(doc(db, 'cms_contracts', contractId), patch as any);
+    await updateDoc(doc(db, 'cms_contracts', contractId), patch);
   };
 
-  // ── Client CRUD (proxied through shared_clients) ──────────────────────────
+  // ── Client CRUD (proxied through shared_clients) ───────────────────────────────────────
   const addClient = async (c: Omit<Client, 'id'>) => {
     await addSharedClient({
       name_ar:              c.name_ar,
@@ -106,7 +108,7 @@ export function useContracts() {
   const deleteClient = async (id: string) =>
     deleteSharedClient(id);
 
-  // ── Template CRUD ─────────────────────────────────────────────────────────
+  // ── Template CRUD ───────────────────────────────────────────────────────────────────
   const addTemplate = async (t: ContractTemplate) =>
     setDoc(doc(db, 'cms_templates', t.id), t);
 
@@ -116,7 +118,7 @@ export function useContracts() {
   const deleteTemplate = async (id: string) =>
     deleteDoc(doc(db, 'cms_templates', id));
 
-  // ── Project CRUD ──────────────────────────────────────────────────────────
+  // ── Project CRUD ────────────────────────────────────────────────────────────────────
   const addProject = async (p: Omit<Project, 'id'>) => {
     const id = crypto.randomUUID();
     await setDoc(doc(db, 'cms_projects', id), { ...p, id });
