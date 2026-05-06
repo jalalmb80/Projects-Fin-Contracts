@@ -167,7 +167,8 @@ interface AppContextType extends AppState {
   markAsSent: (id: string) => Promise<void>;
   voidDocument: (id: string) => Promise<void>;
   returnToDraft: (id: string) => Promise<void>;
-  recordPayment: (payment: Omit<Payment, 'id' | 'createdAt'>) => Promise<void>;
+  // Returns the new payment ID so callers can immediately call allocatePayment.
+  recordPayment: (payment: Omit<Payment, 'id' | 'createdAt'>) => Promise<string>;
   allocatePayment: (paymentId: string, invoiceId: string, amount: number) => Promise<void>;
   addSubscription: (sub: Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateSubscription: (id: string, data: Partial<Subscription>) => Promise<void>;
@@ -218,7 +219,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return unsubscribe;
   }, []);
 
-  // Data Listeners & Fetching
+  // Data Listeners & Fetching.
+  // Depend on state.user?.uid (stable string) instead of state.user (object
+  // reference). Firebase Auth refreshes the token every ~1 hour which creates
+  // a new User object — using the object as a dependency would tear down and
+  // re-create all four onSnapshot listeners on every refresh, causing a brief
+  // data blackout and up to 8 unnecessary Firestore reads per token cycle.
   useEffect(() => {
     if (!state.user) return;
 
@@ -291,7 +297,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       unsubPayments();
       unsubSubscriptions();
     };
-  }, [state.user]);
+  }, [state.user?.uid]);
 
   // --- Helper Functions ---
 
@@ -457,12 +463,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const voidDocument     = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Void });
   const returnToDraft    = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Draft });
 
-  const recordPayment = async (payment: Omit<Payment, 'id' | 'createdAt'>) => {
+  // recordPayment — creates the payment document and returns its ID so the
+  // caller can immediately chain allocatePayment() in an atomic transaction.
+  // Previously returned void, which forced callers to update billing document
+  // balance outside a transaction (TOCTOU bug). Now throws on failure so
+  // callers can handle errors without leaving orphaned payment records.
+  const recordPayment = async (payment: Omit<Payment, 'id' | 'createdAt'>): Promise<string> => {
+    const id = generateId();
     try {
-      const id = generateId();
       await setDoc(doc(db, 'payments', id), { ...payment, id, createdAt: now() });
       addToast('success', 'Payment recorded');
-    } catch (error) { addToast('error', 'Failed to record payment'); }
+      return id;
+    } catch (error) {
+      addToast('error', 'Failed to record payment');
+      throw error;
+    }
   };
 
   // Wrapped in runTransaction so both the payment doc and the invoice doc are
