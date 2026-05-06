@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { PlatformProvider } from './core/context/PlatformContext';
+import { SharedClientsProvider } from './core/context/SharedClientsContext';
 import { GlobalSettingsProvider } from './core/context/GlobalSettingsContext';
 import AppShell from './core/components/AppShell';
 
@@ -48,9 +49,15 @@ export default function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <PlatformProvider>
-          <GlobalSettingsProvider>
-            <AppShell />
-          </GlobalSettingsProvider>
+          {/* SharedClientsProvider opens ONE onSnapshot on shared_clients.
+              Finance (AppContext) and CMS (useContracts) both call
+              useSharedClients() which now reads from this singleton context
+              instead of opening their own duplicate listeners. */}
+          <SharedClientsProvider>
+            <GlobalSettingsProvider>
+              <AppShell />
+            </GlobalSettingsProvider>
+          </SharedClientsProvider>
         </PlatformProvider>
       </BrowserRouter>
     </ErrorBoundary>
