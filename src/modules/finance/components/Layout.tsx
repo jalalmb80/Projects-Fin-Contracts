@@ -4,7 +4,8 @@ import { useApp } from '../context/AppContext';
 import { useLang, t } from '../context/LanguageContext';
 import {
   LayoutDashboard, Briefcase, FileText, Repeat, Users, Settings, LogOut,
-  Menu, X, CreditCard, Package, Bell, Moon, Sun, ChevronLeft, ChevronRight, Globe
+  Menu, X, CreditCard, Package, Bell, Moon, Sun, ChevronLeft, ChevronRight,
+  Globe, AlertCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { signOut } from 'firebase/auth';
@@ -13,15 +14,13 @@ import { DocumentStatus, DocumentDirection, Currency } from '../types';
 import { format } from 'date-fns';
 
 export default function Layout() {
-  const { user, billingDocuments, displayCurrency, setDisplayCurrency } = useApp();
+  const { user, billingDocuments, displayCurrency, setDisplayCurrency, error } = useApp();
   const { lang, setLang } = useLang();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const location  = useLocation();
+  const navigate  = useNavigate();
+  const [isMobileMenuOpen,   setIsMobileMenuOpen]   = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Platform Settings (/settings) is in the platform sidebar (ModuleSwitcher).
-  // It is intentionally NOT duplicated here.
   const navigation = [
     { name_en: 'Dashboard',      name_ar: 'لوحة التحكم',              href: '/finance/dashboard',      icon: LayoutDashboard },
     { name_en: 'Projects',       name_ar: 'المشاريع',                       href: '/finance/projects',       icon: Briefcase },
@@ -66,10 +65,9 @@ export default function Layout() {
         isMobileMenuOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full'),
         isSidebarCollapsed ? 'w-20' : 'w-64'
       )}>
-        {/* Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800">
           {!isSidebarCollapsed && <h1 className="text-xl font-bold text-white truncate">FinArchiTec</h1>}
-          {isSidebarCollapsed && <h1 className="text-xl font-bold text-white mx-auto">FA</h1>}
+          {isSidebarCollapsed  && <h1 className="text-xl font-bold text-white mx-auto">FA</h1>}
           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className="hidden lg:block p-1 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white">
             {isSidebarCollapsed
@@ -78,19 +76,16 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Nav */}
         <div className="flex-1 overflow-y-auto py-4">
           <nav className="px-2 space-y-1">
             {navigation.map(item => {
-              const isActive = location.pathname.startsWith(item.href);
-              const itemName = t(item.name_ar, item.name_en, lang);
+              const isActive  = location.pathname.startsWith(item.href);
+              const itemName  = t(item.name_ar, item.name_en, lang);
               return (
                 <Link key={item.name_en} to={item.href}
                   className={cn(
                     'group flex items-center px-2 py-2 text-sm font-medium rounded-lg transition-colors',
-                    isActive
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white',
                     isSidebarCollapsed ? 'justify-center' : ''
                   )}
                   title={isSidebarCollapsed ? itemName : undefined}
@@ -108,7 +103,6 @@ export default function Layout() {
           </nav>
         </div>
 
-        {/* Footer: user + lang toggle + logout */}
         <div className="border-t border-slate-800 p-4 space-y-3">
           {!isSidebarCollapsed ? (
             <div className="flex items-center">
@@ -127,7 +121,6 @@ export default function Layout() {
             </div>
           )}
 
-          {/* Language toggle */}
           <button
             onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
             className={cn(
@@ -140,7 +133,6 @@ export default function Layout() {
             {!isSidebarCollapsed && <span>{lang === 'ar' ? 'English' : 'عربي'}</span>}
           </button>
 
-          {/* Logout */}
           <button onClick={handleLogout}
             className={cn('w-full flex items-center px-2 py-2 text-sm font-medium text-red-400 rounded-md hover:bg-slate-800 transition-colors', isSidebarCollapsed ? 'justify-center' : '')}
             title={t('تسجيل الخروج', 'Sign out', lang)}>
@@ -179,7 +171,17 @@ export default function Layout() {
             </div>
           </div>
         </header>
+
         <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+          {/* Firestore error banner — shown when AppContext.state.error is set,
+              e.g. after a failed getDocs in fetchOneTimeData. Without this,
+              snapshot errors silently render empty-state "no data" messages. */}
+          {error && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>
