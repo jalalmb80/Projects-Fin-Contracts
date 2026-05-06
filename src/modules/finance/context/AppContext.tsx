@@ -5,14 +5,12 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
-  where, 
   doc, 
   setDoc, 
   updateDoc, 
   deleteDoc, 
   writeBatch, 
   getDocs,
-  Timestamp,
   getDoc,
   runTransaction
 } from 'firebase/firestore';
@@ -30,7 +28,6 @@ import {
   BudgetCategory, 
   AppSettings,
   Transaction,
-  ProjectStatus,
   MilestoneStatus,
   DocumentType,
   DocumentDirection,
@@ -90,7 +87,7 @@ const initialState: AppState = {
     billingDocuments: true,
     payments: true,
     subscriptions: true,
-    counterparties: false, // sourced from useSharedClients — no onSnapshot here
+    counterparties: false,
     products: true,
     legalEntities: true,
     budgetCategories: true,
@@ -167,7 +164,6 @@ interface AppContextType extends AppState {
   markAsSent: (id: string) => Promise<void>;
   voidDocument: (id: string) => Promise<void>;
   returnToDraft: (id: string) => Promise<void>;
-  // Returns the new payment ID so callers can immediately call allocatePayment.
   recordPayment: (payment: Omit<Payment, 'id' | 'createdAt'>) => Promise<string>;
   allocatePayment: (paymentId: string, invoiceId: string, amount: number) => Promise<void>;
   addSubscription: (sub: Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
@@ -206,9 +202,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { addToast } = useToast();
   const [state, dispatch] = useReducer(appReducer, initialState);
 
-  // Counterparties now sourced from shared_clients via useSharedClients.
-  // Finance sees CUSTOMER | BOTH | INTERCOMPANY records, shaped like old Counterparty[].
-  // VENDOR-only records remain in /counterparties (legacy) until a vendor module is built.
   const { asFinanceCounterparties } = useSharedClients();
 
   // Auth Listener
@@ -220,11 +213,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   // Data Listeners & Fetching.
-  // Depend on state.user?.uid (stable string) instead of state.user (object
-  // reference). Firebase Auth refreshes the token every ~1 hour which creates
-  // a new User object — using the object as a dependency would tear down and
-  // re-create all four onSnapshot listeners on every refresh, causing a brief
-  // data blackout and up to 8 unnecessary Firestore reads per token cycle.
+  // Depend on state.user?.uid (stable string) not state.user (object reference)
+  // so token refreshes (~1 h) do not re-create all four onSnapshot listeners.
   useEffect(() => {
     if (!state.user) return;
 
@@ -232,7 +222,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       query(collection(db, 'projects'), orderBy('createdAt', 'desc')),
       (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'projects', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
       (error) => {
-        console.error(`[projects] snapshot error:`, error.code);
+        console.error('[projects] snapshot error:', error.code);
         dispatch({ type: 'SET_LOADING', collection: 'projects', isLoading: false });
       }
     );
@@ -241,7 +231,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       query(collection(db, 'billingDocuments'), orderBy('createdAt', 'desc')),
       (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'billingDocuments', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
       (error) => {
-        console.error(`[billingDocuments] snapshot error:`, error.code);
+        console.error('[billingDocuments] snapshot error:', error.code);
         dispatch({ type: 'SET_LOADING', collection: 'billingDocuments', isLoading: false });
       }
     );
@@ -250,7 +240,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       query(collection(db, 'payments'), orderBy('createdAt', 'desc')),
       (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'payments', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
       (error) => {
-        console.error(`[payments] snapshot error:`, error.code);
+        console.error('[payments] snapshot error:', error.code);
         dispatch({ type: 'SET_LOADING', collection: 'payments', isLoading: false });
       }
     );
@@ -259,12 +249,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       query(collection(db, 'subscriptions'), orderBy('createdAt', 'desc')),
       (snap) => dispatch({ type: 'SET_COLLECTION', collection: 'subscriptions', payload: snap.docs.map(d => ({ id: d.id, ...d.data() })) }),
       (error) => {
-        console.error(`[subscriptions] snapshot error:`, error.code);
+        console.error('[subscriptions] snapshot error:', error.code);
         dispatch({ type: 'SET_LOADING', collection: 'subscriptions', isLoading: false });
       }
     );
 
-    // One-time Fetches
     const fetchOneTimeData = async () => {
       try {
         const productsSnap = await getDocs(query(collection(db, 'products'), orderBy('name')));
@@ -278,7 +267,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         const settingsDoc = await getDoc(doc(db, 'appSettings', 'config'));
         if (settingsDoc.exists()) {
-          dispatch({ type: 'SET_SETTINGS', payload: settingsDoc.data() as AppSettings });
+          // Merge with INITIAL_SETTINGS so new fields (e.g. vatRate) are present
+          // for existing Firestore documents that pre-date this field.
+          dispatch({ type: 'SET_SETTINGS', payload: { ...INITIAL_SETTINGS, ...settingsDoc.data() } as AppSettings });
         } else {
           await setDoc(doc(db, 'appSettings', 'config'), INITIAL_SETTINGS);
           dispatch({ type: 'SET_SETTINGS', payload: INITIAL_SETTINGS });
@@ -299,12 +290,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [state.user?.uid]);
 
-  // --- Helper Functions ---
+  // --- Helpers ---
 
   const generateId = () => crypto.randomUUID();
   const now = () => new Date().toISOString();
 
-  // --- CRUD Implementations ---
+  // --- CRUD ---
 
   const addProject = async (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
@@ -370,39 +361,57 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const milestone = project.milestones.find(m => m.id === milestoneId);
       if (!milestone) throw new Error('Milestone not found');
 
-      // Guard: if milestone is already Invoiced, do not create a second invoice.
-      // Protects against double-click / rapid re-entry before the snapshot updates
-      // the local state. The server-side rules cannot enforce this by themselves
-      // because the milestone lives as an array element on the project document.
       if (milestone.status === MilestoneStatus.Invoiced) {
         addToast('success', 'Milestone already invoiced');
         return;
       }
 
+      // Use the configured VAT rate from settings — never hard-code 0.15.
+      const vat = state.settings.vatRate;
+
       const batch = writeBatch(db);
       const invoiceId = generateId();
       batch.update(doc(db, 'projects', projectId), {
         milestones: project.milestones.map(m => 
-          m.id === milestoneId ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId } : m
-        ), updatedAt: now()
+          m.id === milestoneId
+            ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId }
+            : m
+        ),
+        updatedAt: now()
       });
       const lineItem: BillingLineItem = {
-        id: generateId(), description: `Milestone: ${milestone.name}`, quantity: 1,
-        unitPrice: milestone.amount, taxCode: TaxProfile.Standard,
-        taxAmount: milestone.amount * 0.15, subtotal: milestone.amount,
-        total: milestone.amount * 1.15, milestoneId: milestone.id
+        id: generateId(),
+        description: `Milestone: ${milestone.name}`,
+        quantity: 1,
+        unitPrice: milestone.amount,
+        taxCode: TaxProfile.Standard,
+        taxAmount: milestone.amount * vat,
+        subtotal: milestone.amount,
+        total: milestone.amount * (1 + vat),
+        milestoneId: milestone.id,
       };
       const newInvoice: BillingDocument = {
-        id: invoiceId, type: DocumentType.Invoice, direction: DocumentDirection.AR,
-        status: DocumentStatus.Draft, date: now().split('T')[0],
+        id: invoiceId,
+        type: DocumentType.Invoice,
+        direction: DocumentDirection.AR,
+        status: DocumentStatus.Draft,
+        date: now().split('T')[0],
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         counterpartyId: project.clientId,
         counterpartyName: asFinanceCounterparties.find(c => c.id === project.clientId)?.name || 'Unknown',
-        projectId: project.id, milestoneId: milestone.id,
-        currency: project.baseCurrency, exchangeRate: 1, lines: [lineItem],
-        subtotal: lineItem.subtotal, taxTotal: lineItem.taxAmount, total: lineItem.total,
-        balance: lineItem.total, paidAmount: 0, taxProfile: TaxProfile.Standard,
-        createdAt: now(), updatedAt: now()
+        projectId: project.id,
+        milestoneId: milestone.id,
+        currency: project.baseCurrency,
+        exchangeRate: 1,
+        lines: [lineItem],
+        subtotal: lineItem.subtotal,
+        taxTotal: lineItem.taxAmount,
+        total: lineItem.total,
+        balance: lineItem.total,
+        paidAmount: 0,
+        taxProfile: TaxProfile.Standard,
+        createdAt: now(),
+        updatedAt: now(),
       };
       batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
       await batch.commit();
@@ -460,14 +469,61 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const submitForApproval = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.PendingApproval });
   const approveDocument  = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Approved });
   const markAsSent       = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Sent });
-  const voidDocument     = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Void });
   const returnToDraft    = async (id: string) => updateBillingDocument(id, { status: DocumentStatus.Draft });
 
-  // recordPayment — creates the payment document and returns its ID so the
-  // caller can immediately chain allocatePayment() in an atomic transaction.
-  // Previously returned void, which forced callers to update billing document
-  // balance outside a transaction (TOCTOU bug). Now throws on failure so
-  // callers can handle errors without leaving orphaned payment records.
+  // voidDocument — atomically:
+  //   1. Resets invoice paidAmount=0, balance=total, status=Void.
+  //   2. For every payment that had an allocation against this invoice:
+  //      removes the allocation entry and returns the amount to unallocatedAmount.
+  // Previously this was a one-liner updateBillingDocument() that left stale
+  // paidAmount/balance and orphaned payment allocations.
+  const voidDocument = async (id: string) => {
+    try {
+      // Collect payment IDs from local state (used only to know which docs to
+      // read inside the transaction — fresh data is re-read atomically).
+      const linkedPaymentIds = state.payments
+        .filter(p => p.allocations.some(a => a.invoiceId === id))
+        .map(p => p.id);
+
+      await runTransaction(db, async (transaction) => {
+        const invoiceRef = doc(db, 'billingDocuments', id);
+        const invoiceSnap = await transaction.get(invoiceRef);
+        if (!invoiceSnap.exists()) throw new Error('Invoice not found');
+        const invoice = invoiceSnap.data() as BillingDocument;
+
+        // Read all linked payment docs inside the transaction for fresh data.
+        const paymentSnaps = await Promise.all(
+          linkedPaymentIds.map(pid => transaction.get(doc(db, 'payments', pid)))
+        );
+
+        // Reset invoice to voided state.
+        transaction.update(invoiceRef, {
+          status: DocumentStatus.Void,
+          paidAmount: 0,
+          balance: invoice.total,
+          updatedAt: now(),
+        });
+
+        // Reverse each payment’s allocation for this invoice.
+        for (const paySnap of paymentSnaps) {
+          if (!paySnap.exists()) continue;
+          const payment = paySnap.data() as Payment;
+          const reversed = payment.allocations
+            .filter(a => a.invoiceId === id)
+            .reduce((sum, a) => sum + a.amount, 0);
+          if (reversed === 0) continue;
+          transaction.update(paySnap.ref, {
+            allocations: payment.allocations.filter(a => a.invoiceId !== id),
+            unallocatedAmount: (payment.unallocatedAmount ?? 0) + reversed,
+          });
+        }
+      });
+
+      addToast('success', 'Document voided');
+    } catch (error) { console.error(error); addToast('error', 'Failed to void document'); }
+  };
+
+  // recordPayment — returns new payment ID so callers can chain allocatePayment.
   const recordPayment = async (payment: Omit<Payment, 'id' | 'createdAt'>): Promise<string> => {
     const id = generateId();
     try {
@@ -480,11 +536,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Wrapped in runTransaction so both the payment doc and the invoice doc are
-  // re-read at commit time and updated atomically. The previous writeBatch
-  // version read from React state before queuing writes, which created a
-  // TOCTOU window: two allocations in flight could each see the same
-  // unallocatedAmount/balance and both succeed, producing over-allocation.
+  // allocatePayment — Firestore transaction so concurrent allocations cannot
+  // both see the same unallocatedAmount and double-allocate.
   const allocatePayment = async (paymentId: string, invoiceId: string, amount: number) => {
     try {
       await runTransaction(db, async (transaction) => {
@@ -545,55 +598,107 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) { addToast('error', 'Failed to delete subscription'); }
   };
 
+  // runBillingJob fixes:
+  //   1. Uses settings.vatRate — no hardcoded 0.15.
+  //   2. Handles Custom billingCycle via billingInterval (days). Without this,
+  //      Custom subscriptions never advance nextInvoiceDate and regenerate
+  //      invoices on every subsequent job run.
+  //   3. Commits in batches of 100 subscriptions (200 Firestore writes each) to
+  //      stay under the 500-write-per-batch hard limit.
   const runBillingJob = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const dueSubscriptions = state.subscriptions.filter(s => 
+      const vat = state.settings.vatRate;
+
+      const dueSubscriptions = state.subscriptions.filter(s =>
         s.status === SubscriptionStatus.Active && s.nextInvoiceDate <= today
       );
-      if (dueSubscriptions.length === 0) { addToast('success', 'No subscriptions due for billing'); return; }
-      const batch = writeBatch(db);
-      let count = 0;
-      for (const sub of dueSubscriptions) {
+      if (dueSubscriptions.length === 0) {
+        addToast('success', 'No subscriptions due for billing');
+        return;
+      }
+
+      // Pre-build all invoice + subscription update pairs so we can chunk cleanly.
+      type JobItem = {
+        invoice: BillingDocument;
+        subId: string;
+        nextInvoiceDate: string;
+      };
+
+      const items: JobItem[] = dueSubscriptions.map(sub => {
         const invoiceId = generateId();
         const lines: BillingLineItem[] = sub.items.map(item => ({
-          id: generateId(), description: item.description, quantity: item.quantity,
-          unitPrice: item.unitPrice, taxCode: item.taxCode,
-          taxAmount: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 0.15 : 0),
+          id: generateId(),
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          taxCode: item.taxCode,
+          taxAmount: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? vat : 0),
           subtotal: item.quantity * item.unitPrice,
-          total: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 1.15 : 1)
+          total: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 1 + vat : 1),
         }));
         const subtotal = lines.reduce((s, l) => s + l.subtotal, 0);
         const taxTotal = lines.reduce((s, l) => s + l.taxAmount, 0);
         const total = subtotal + taxTotal;
-        const newInvoice: BillingDocument = {
-          id: invoiceId, type: DocumentType.Invoice,
+
+        const nextDate = new Date(sub.nextInvoiceDate);
+        if (sub.billingCycle === 'Monthly')        nextDate.setMonth(nextDate.getMonth() + 1);
+        else if (sub.billingCycle === 'Quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
+        else if (sub.billingCycle === 'Yearly')    nextDate.setFullYear(nextDate.getFullYear() + 1);
+        else if (sub.billingCycle === 'Custom')    nextDate.setDate(nextDate.getDate() + (sub.billingInterval ?? 30));
+
+        const invoice: BillingDocument = {
+          id: invoiceId,
+          type: DocumentType.Invoice,
           direction: sub.direction === 'AR' ? DocumentDirection.AR : DocumentDirection.AP,
-          status: DocumentStatus.Draft, date: today,
+          status: DocumentStatus.Draft,
+          date: today,
           dueDate: new Date(Date.now() + sub.paymentTermsDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           counterpartyId: sub.counterpartyId,
           counterpartyName: asFinanceCounterparties.find(c => c.id === sub.counterpartyId)?.name || 'Unknown',
-          subscriptionId: sub.id, currency: sub.currency, exchangeRate: 1, lines,
-          subtotal, taxTotal, total, balance: total, paidAmount: 0,
-          taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now()
+          subscriptionId: sub.id,
+          currency: sub.currency,
+          exchangeRate: 1,
+          lines,
+          subtotal,
+          taxTotal,
+          total,
+          balance: total,
+          paidAmount: 0,
+          taxProfile: TaxProfile.Standard,
+          createdAt: now(),
+          updatedAt: now(),
         };
-        batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
-        const nextDate = new Date(sub.nextInvoiceDate);
-        if (sub.billingCycle === 'Monthly') nextDate.setMonth(nextDate.getMonth() + 1);
-        else if (sub.billingCycle === 'Quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
-        else if (sub.billingCycle === 'Yearly') nextDate.setFullYear(nextDate.getFullYear() + 1);
-        batch.update(doc(db, 'subscriptions', sub.id), {
-          lastInvoiceDate: today, nextInvoiceDate: nextDate.toISOString().split('T')[0], updatedAt: now()
-        });
-        count++;
+
+        return {
+          invoice,
+          subId: sub.id,
+          nextInvoiceDate: nextDate.toISOString().split('T')[0],
+        };
+      });
+
+      // Commit in chunks of 100 subscriptions (= 200 writes, well under 500 limit).
+      const CHUNK = 100;
+      let count = 0;
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const chunk = items.slice(i, i + CHUNK);
+        const batch = writeBatch(db);
+        for (const { invoice, subId, nextInvoiceDate } of chunk) {
+          batch.set(doc(db, 'billingDocuments', invoice.id), invoice);
+          batch.update(doc(db, 'subscriptions', subId), {
+            lastInvoiceDate: today,
+            nextInvoiceDate,
+            updatedAt: now(),
+          });
+          count++;
+        }
+        await batch.commit();
       }
-      await batch.commit();
+
       addToast('success', `Billing job completed. Generated ${count} invoices.`);
     } catch (error) { console.error(error); addToast('error', 'Billing job failed'); }
   };
 
-  // Counterparties — write to /counterparties (VENDOR-only legacy)
-  // Customer CRUD should go through SharedClientsPage (/clients route).
   const addCounterparty = async (cp: Omit<Counterparty, 'id' | 'createdAt'>) => {
     try {
       const id = generateId();
@@ -691,10 +796,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_DISPLAY_CURRENCY', payload: currency });
   };
 
+  // convert — sarToUsdRate is derived from usdToSarRate so the two values can
+  // never diverge. The sarToUsdRate field in AppSettings is kept for Firestore
+  // backward-compat but is not read here.
   const convert = (amount: number, from: Currency, to: Currency): number => {
     if (from === to) return amount;
     if (from === Currency.USD && to === Currency.SAR) return amount * state.settings.usdToSarRate;
-    if (from === Currency.SAR && to === Currency.USD) return amount * state.settings.sarToUsdRate;
+    if (from === Currency.SAR && to === Currency.USD) return amount / state.settings.usdToSarRate;
     return amount;
   };
 
@@ -707,7 +815,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const value = {
     ...state,
-    // Override counterparties with shared_clients data (same Counterparty[] shape)
     counterparties: asFinanceCounterparties as unknown as Counterparty[],
     addProject, updateProject, deleteProject,
     addMilestone, updateMilestone, deleteMilestone, completeMilestone,
@@ -721,7 +828,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateSettings,
     setDisplayCurrency,
     formatMoney,
-    convert
+    convert,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
