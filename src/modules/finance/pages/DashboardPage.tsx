@@ -28,7 +28,6 @@ export default function Dashboard() {
     loading,
     user,
     displayCurrency,
-    setDisplayCurrency,
     formatMoney,
     settings,
   } = useApp();
@@ -37,18 +36,11 @@ export default function Dashboard() {
   if (loading.projects || loading.billingDocuments || loading.subscriptions) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
 
-  // All KPI and chart data is derived in a single useMemo so heavy filter+reduce
-  // chains run only when the underlying data or display settings actually change,
-  // not on every re-render triggered by any AppContext state update.
-  //
-  // convert() is intentionally inlined here (using settings.usdToSarRate directly)
-  // so the memo deps stay stable — the context-provided convert() reference
-  // changes every render and would defeat the memo.
   const kpis = useMemo(() => {
     const cvt = (amount: number, currency: Currency): number => {
       if (currency === displayCurrency) return amount;
@@ -57,114 +49,70 @@ export default function Dashboard() {
       return amount;
     };
 
-    // Current and previous calendar month keys (yyyy-MM)
     const now = new Date();
-    const curMonth = format(now, 'yyyy-MM');
-    const prevD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevMonth = format(prevD, 'yyyy-MM');
+    const curMonth  = format(now, 'yyyy-MM');
+    const prevMonth = format(new Date(now.getFullYear(), now.getMonth() - 1, 1), 'yyyy-MM');
 
-    // Sum invoices matching direction + date month + optional status filter.
-    // When statusFilter is omitted, excludes Draft and Void (standard reporting view).
-    const monthSum = (
-      dir: DocumentDirection,
-      monthKey: string,
-      statusFilter?: DocumentStatus
-    ): number =>
+    const monthSum = (dir: DocumentDirection, monthKey: string, statusFilter?: DocumentStatus): number =>
       invoices
         .filter(i =>
           i.direction === dir &&
-          (statusFilter
-            ? i.status === statusFilter
-            : i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void) &&
+          (statusFilter ? i.status === statusFilter : i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void) &&
           (i.date ?? '').startsWith(monthKey)
         )
         .reduce((s, i) => s + cvt(i.total, i.currency), 0);
 
-    // ── All-time KPIs ─────────────────────────────────────────────────────────────────────
     const totalAR = invoices
       .filter(i => i.direction === DocumentDirection.AR && i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void)
       .reduce((s, i) => s + cvt(i.total, i.currency), 0);
-
     const totalAP = invoices
       .filter(i => i.direction === DocumentDirection.AP && i.status !== DocumentStatus.Draft && i.status !== DocumentStatus.Void)
       .reduce((s, i) => s + cvt(i.total, i.currency), 0);
-
     const overdueAmount = invoices
       .filter(i => i.status === DocumentStatus.Overdue)
       .reduce((s, i) => s + cvt(i.balance, i.currency), 0);
-
-    const overdueCount = invoices.filter(i => i.status === DocumentStatus.Overdue).length;
-
-    const paidAR = invoices
-      .filter(i => i.direction === DocumentDirection.AR && i.status === DocumentStatus.Paid)
-      .reduce((s, i) => s + cvt(i.total, i.currency), 0);
-    const paidAP = invoices
-      .filter(i => i.direction === DocumentDirection.AP && i.status === DocumentStatus.Paid)
-      .reduce((s, i) => s + cvt(i.total, i.currency), 0);
-    const cashPosition = paidAR - paidAP;
-
-    const activeProjects = projects.filter(p => p.status === ProjectStatus.Active).length;
+    const overdueCount  = invoices.filter(i => i.status === DocumentStatus.Overdue).length;
+    const cashPosition  =
+      invoices.filter(i => i.direction === DocumentDirection.AR && i.status === DocumentStatus.Paid).reduce((s, i) => s + cvt(i.total, i.currency), 0) -
+      invoices.filter(i => i.direction === DocumentDirection.AP && i.status === DocumentStatus.Paid).reduce((s, i) => s + cvt(i.total, i.currency), 0);
+    const activeProjects      = projects.filter(p => p.status === ProjectStatus.Active).length;
     const activeSubscriptions = subscriptions.filter(s => s.status === SubscriptionStatus.Active).length;
 
-    // ── Month-over-month trends ─────────────────────────────────────────────────────────
-    // Compare invoices dated in the current calendar month vs the previous one.
-    // Returns undefined when prev=0 so KpiCard can omit the badge cleanly.
     const makeTrend = (cur: number, prev: number) => {
       if (prev === 0) return undefined;
-      const pct = Math.round(Math.abs((cur - prev) / prev) * 100);
-      return { value: pct, direction: (cur >= prev ? 'up' : 'down') as 'up' | 'down' };
+      return { value: Math.round(Math.abs((cur - prev) / prev) * 100), direction: (cur >= prev ? 'up' : 'down') as 'up' | 'down' };
     };
-
     const arTrend   = makeTrend(monthSum(DocumentDirection.AR, curMonth), monthSum(DocumentDirection.AR, prevMonth));
     const apTrend   = makeTrend(monthSum(DocumentDirection.AP, curMonth), monthSum(DocumentDirection.AP, prevMonth));
-    const thisCash  = monthSum(DocumentDirection.AR, curMonth, DocumentStatus.Paid) - monthSum(DocumentDirection.AP, curMonth, DocumentStatus.Paid);
-    const prevCash  = monthSum(DocumentDirection.AR, prevMonth, DocumentStatus.Paid) - monthSum(DocumentDirection.AP, prevMonth, DocumentStatus.Paid);
-    const cashTrend = makeTrend(thisCash, prevCash);
-    // Overdue is a point-in-time snapshot; month-over-month comparison is
-    // meaningless without a status-change history. No trend badge for it.
+    const cashTrend = makeTrend(
+      monthSum(DocumentDirection.AR, curMonth,  DocumentStatus.Paid) - monthSum(DocumentDirection.AP, curMonth,  DocumentStatus.Paid),
+      monthSum(DocumentDirection.AR, prevMonth, DocumentStatus.Paid) - monthSum(DocumentDirection.AP, prevMonth, DocumentStatus.Paid)
+    );
 
-    // ── Revenue trend chart (last 6 months, real data) ───────────────────────────────
     const revenueTrendData = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-      const key   = format(d, 'yyyy-MM');
-      const label = format(d, 'MMM');
-      const value = invoices
-        .filter(inv =>
-          inv.direction === DocumentDirection.AR &&
-          inv.status !== DocumentStatus.Draft &&
-          inv.status !== DocumentStatus.Void &&
-          (inv.date ?? '').startsWith(key)
-        )
-        .reduce((sum, inv) => sum + cvt(inv.total, inv.currency), 0);
-      return { name: label, value };
+      const d   = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      const key = format(d, 'yyyy-MM');
+      return {
+        name:  format(d, 'MMM'),
+        value: invoices
+          .filter(inv => inv.direction === DocumentDirection.AR && inv.status !== DocumentStatus.Draft && inv.status !== DocumentStatus.Void && (inv.date ?? '').startsWith(key))
+          .reduce((sum, inv) => sum + cvt(inv.total, inv.currency), 0),
+      };
     });
 
-    // ── AR / AP pie ─────────────────────────────────────────────────────────────────────────────
     const arApData = [
       { name: t('الذمم المدينة', 'Receivables', lang), value: totalAR, color: '#4f46e5' },
-      { name: t('الذمم الدائنة', 'Payables', lang),   value: totalAP, color: '#ef4444' },
+      { name: t('الذمم الدائنة', 'Payables',    lang), value: totalAP, color: '#ef4444' },
     ].filter(d => d.value > 0);
 
-    // ── Recent invoices ───────────────────────────────────────────────────────────────────────
     const recentInvoices = [...invoices]
       .sort((a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime())
       .slice(0, 5);
 
-    return {
-      totalAR, totalAP, overdueAmount, overdueCount, cashPosition,
-      activeProjects, activeSubscriptions,
-      arTrend, apTrend, cashTrend,
-      revenueTrendData, arApData, recentInvoices,
-    };
+    return { totalAR, totalAP, overdueAmount, overdueCount, cashPosition, activeProjects, activeSubscriptions, arTrend, apTrend, cashTrend, revenueTrendData, arApData, recentInvoices };
   }, [invoices, projects, subscriptions, displayCurrency, settings.usdToSarRate, lang]);
 
-  const {
-    totalAR, totalAP, overdueAmount, overdueCount, cashPosition,
-    activeProjects, activeSubscriptions,
-    arTrend, apTrend, cashTrend,
-    revenueTrendData, arApData, recentInvoices,
-  } = kpis;
-
+  const { totalAR, totalAP, overdueAmount, overdueCount, cashPosition, activeProjects, activeSubscriptions, arTrend, apTrend, cashTrend, revenueTrendData, arApData, recentInvoices } = kpis;
   const trendLabel = t('مقارنة بالشهر الماضي', 'vs last month', lang);
 
   const getStatusBadgeClass = (status: DocumentStatus): string => {
@@ -180,7 +128,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Page Header */}
+      {/* Page Header — greeting + overdue alert only.
+          Date and currency switcher live in Layout.tsx header so they appear
+          on every Finance page. Rendering them here too caused duplicates. */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
@@ -190,80 +140,31 @@ export default function Dashboard() {
             {t('إليك ما يحدث في مشاريعك اليوم.', "Here's what's happening with your projects today.", lang)}
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          {overdueCount > 0 && (
-            <Link
-              to="/finance/billing"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors"
-            >
-              <AlertCircle className="h-4 w-4" />
-              {overdueCount} {t('متأخرة', 'overdue', lang)}
-            </Link>
-          )}
-          <div className="px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-sm font-medium text-slate-600">
-            {format(new Date(), 'MMMM d, yyyy')}
-          </div>
-          <select
-            value={displayCurrency}
-            onChange={(e) => setDisplayCurrency(e.target.value as Currency)}
-            className="form-input py-2 pl-3 pr-10 text-sm border-slate-200 shadow-sm rounded-lg focus:ring-primary-500 focus:border-primary-500"
+        {overdueCount > 0 && (
+          <Link
+            to="/finance/billing"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors"
           >
-            <option value={Currency.USD}>USD ($)</option>
-            <option value={Currency.SAR}>SAR (﷼)</option>
-          </select>
-        </div>
+            <AlertCircle className="h-4 w-4" />
+            {overdueCount} {t('متأخرة', 'overdue', lang)}
+          </Link>
+        )}
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        <KpiCard
-          title={t('إجمالي الذمم المدينة', 'Total Receivables', lang)}
-          value={formatMoney(totalAR, displayCurrency)}
-          icon={TrendingUp}
-          color="indigo"
-          trend={arTrend ? { ...arTrend, label: trendLabel } : undefined}
-        />
-        <KpiCard
-          title={t('إجمالي الذمم الدائنة', 'Total Payables', lang)}
-          value={formatMoney(totalAP, displayCurrency)}
-          icon={FileText}
-          color="rose"
-          trend={apTrend ? { ...apTrend, label: trendLabel } : undefined}
-        />
-        <KpiCard
-          title={t('المبالغ المتأخرة', 'Overdue Amount', lang)}
-          value={formatMoney(overdueAmount, displayCurrency)}
-          icon={AlertCircle}
-          color="amber"
-        />
-        <KpiCard
-          title={t('الوضع النقدي', 'Cash Position', lang)}
-          value={formatMoney(cashPosition, displayCurrency)}
-          icon={DollarSign}
-          color="green"
-          trend={cashTrend ? { ...cashTrend, label: trendLabel } : undefined}
-        />
-        <KpiCard
-          title={t('المشاريع النشطة', 'Active Projects', lang)}
-          value={activeProjects}
-          icon={Briefcase}
-          color="indigo"
-        />
-        <KpiCard
-          title={t('الاشتراكات النشطة', 'Active Subscriptions', lang)}
-          value={activeSubscriptions}
-          icon={Repeat}
-          color="green"
-        />
+        <KpiCard title={t('إجمالي الذمم المدينة', 'Total Receivables',    lang)} value={formatMoney(totalAR,       displayCurrency)} icon={TrendingUp}  color="indigo" trend={arTrend   ? { ...arTrend,   label: trendLabel } : undefined} />
+        <KpiCard title={t('إجمالي الذمم الدائنة', 'Total Payables',       lang)} value={formatMoney(totalAP,       displayCurrency)} icon={FileText}    color="rose"   trend={apTrend   ? { ...apTrend,   label: trendLabel } : undefined} />
+        <KpiCard title={t('المبالغ المتأخرة',      'Overdue Amount',       lang)} value={formatMoney(overdueAmount, displayCurrency)} icon={AlertCircle} color="amber" />
+        <KpiCard title={t('الوضع النقدي',          'Cash Position',        lang)} value={formatMoney(cashPosition,  displayCurrency)} icon={DollarSign}  color="green"  trend={cashTrend ? { ...cashTrend, label: trendLabel } : undefined} />
+        <KpiCard title={t('المشاريع النشطة',       'Active Projects',      lang)} value={activeProjects}      icon={Briefcase} color="indigo" />
+        <KpiCard title={t('الاشتراكات النشطة',     'Active Subscriptions', lang)} value={activeSubscriptions} icon={Repeat}    color="green"  />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Trend */}
         <div className="bg-white shadow-sm rounded-xl border border-slate-100 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-1">
-            {t('اتجاه الإيرادات', 'Revenue Trend', lang)}
-          </h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-1">{t('اتجاه الإيرادات', 'Revenue Trend', lang)}</h3>
           <p className="text-xs text-slate-400 mb-5">{t('الفواتير الصادرة — آخر 6 أشهر', 'Issued AR invoices — last 6 months', lang)}</p>
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={revenueTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -275,8 +176,7 @@ export default function Dashboard() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }}
-                tickFormatter={(v: number) => formatMoney(v, displayCurrency)} width={80} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(v: number) => formatMoney(v, displayCurrency)} width={80} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 itemStyle={{ color: '#1e293b' }}
@@ -287,20 +187,15 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* AR / AP Breakdown */}
         <div className="bg-white shadow-sm rounded-xl border border-slate-100 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-1">
-            {t('الذمم المدينة مقابل الدائنة', 'Receivables vs Payables', lang)}
-          </h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-1">{t('الذمم المدينة مقابل الدائنة', 'Receivables vs Payables', lang)}</h3>
           <p className="text-xs text-slate-400 mb-5">{t('المستندات المعتمدة والصادرة فقط', 'Approved & issued documents only', lang)}</p>
           {arApData.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={arApData} cx="50%" cy="50%" innerRadius={65} outerRadius={90} paddingAngle={5} dataKey="value">
-                    {arApData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
+                    {arApData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                   </Pie>
                   <Tooltip
                     contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
@@ -330,7 +225,7 @@ export default function Dashboard() {
       <div className="bg-white shadow-sm rounded-xl border border-slate-100 overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900">{t('أحدث الفواتير', 'Recent Invoices', lang)}</h3>
-          <Link to="/finance/billing" className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
+          <Link to="/finance/billing" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
             {t('عرض الكل', 'View all', lang)} →
           </Link>
         </div>
@@ -338,11 +233,11 @@ export default function Dashboard() {
           <table className="min-w-full divide-y divide-slate-100">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('المستند', 'Document', lang)}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('المستند',       'Document',     lang)}</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('الطرف المقابل', 'Counterparty', lang)}</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('التاريخ', 'Date', lang)}</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('الحالة', 'Status', lang)}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">{t('المبلغ', 'Amount', lang)}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('التاريخ',       'Date',         lang)}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('الحالة',        'Status',       lang)}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">{t('المبلغ',        'Amount',       lang)}</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
@@ -350,11 +245,11 @@ export default function Dashboard() {
                 <tr key={invoice.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600">
+                      <div className="flex-shrink-0 h-8 w-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
                         <FileText className="h-4 w-4" />
                       </div>
                       <div>
-                        <Link to={`/finance/billing/${invoice.id}`} className="text-sm font-medium text-primary-600 hover:underline">
+                        <Link to={`/finance/billing/${invoice.id}`} className="text-sm font-medium text-indigo-600 hover:underline">
                           {invoice.documentNumber || t('مسودة', 'Draft', lang)}
                         </Link>
                         <div className="text-xs text-slate-500">{tEnum(invoice.type, lang)}</div>
