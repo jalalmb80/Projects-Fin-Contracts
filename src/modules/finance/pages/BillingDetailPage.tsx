@@ -67,50 +67,30 @@ export default function BillingDetailPage() {
   }
 
   const counterparty = counterparties.find(c => c.id === document.counterpartyId);
-  const fromEntity = legalEntities.find(e => e.id === document.fromEntityId);
-  const toEntity = legalEntities.find(e => e.id === document.toEntityId);
+  const fromEntity   = legalEntities.find(e => e.id === document.fromEntityId);
+  const toEntity     = legalEntities.find(e => e.id === document.toEntityId);
 
-  // Payment History: built from allocations[] so it stays in sync with
-  // allocatePayment() which is the single source of truth for paidAmount/balance.
-  const relatedPayments = payments.flatMap(p => 
+  const relatedPayments = payments.flatMap(p =>
     p.allocations
       .filter(a => a.invoiceId === document.id)
-      .map(a => ({
-        paymentId: p.id,
-        date: p.date,
-        method: p.method,
-        reference: p.reference,
-        amount: a.amount,
-        currency: p.currency
-      }))
+      .map(a => ({ paymentId: p.id, date: p.date, method: p.method, reference: p.reference, amount: a.amount, currency: p.currency }))
   ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const getStatusColor = (status: DocumentStatus) => {
     switch (status) {
-      case DocumentStatus.Paid: return 'bg-green-100 text-green-800';
-      case DocumentStatus.Sent: return 'bg-blue-100 text-blue-800';
-      case DocumentStatus.Issued: return 'bg-blue-50 text-blue-600';
+      case DocumentStatus.Paid:    return 'bg-green-100 text-green-800';
+      case DocumentStatus.Sent:    return 'bg-blue-100 text-blue-800';
+      case DocumentStatus.Issued:  return 'bg-blue-50 text-blue-600';
       case DocumentStatus.Overdue: return 'bg-red-100 text-red-800';
-      case DocumentStatus.Draft: return 'bg-gray-100 text-gray-800';
-      case DocumentStatus.Void: return 'bg-gray-200 text-gray-500';
-      default: return 'bg-gray-100 text-gray-800';
+      case DocumentStatus.Draft:   return 'bg-gray-100 text-gray-800';
+      case DocumentStatus.Void:    return 'bg-gray-200 text-gray-500';
+      default:                     return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: document.currency,
-      maximumFractionDigits: 2
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: document.currency, maximumFractionDigits: 2 }).format(amount);
 
-  // recordPayment creates the Payment document (with unallocatedAmount set to
-  // the full payment amount) and returns the new payment ID. allocatePayment
-  // then runs a Firestore transaction that atomically deducts from
-  // unallocatedAmount, increments invoice.paidAmount, updates invoice.balance,
-  // and sets the correct status. This eliminates the TOCTOU race that existed
-  // when paidAmount/balance were updated from stale React state after the fact.
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentAmount <= 0 || paymentAmount > document.balance) {
@@ -119,15 +99,11 @@ export default function BillingDetailPage() {
     }
     try {
       const paymentId = await recordPayment({
-        date: paymentDate,
-        amount: paymentAmount,
-        currency: document.currency,
+        date: paymentDate, amount: paymentAmount, currency: document.currency,
         counterpartyId: document.counterpartyId,
         direction: document.direction === DocumentDirection.AR ? PaymentDirection.IN : PaymentDirection.OUT,
-        method: paymentMethod,
-        reference: paymentReference,
-        allocations: [],
-        unallocatedAmount: paymentAmount,
+        method: paymentMethod, reference: paymentReference,
+        allocations: [], unallocatedAmount: paymentAmount,
       });
       await allocatePayment(paymentId, document.id, paymentAmount);
       setIsPaymentModalOpen(false);
@@ -148,12 +124,8 @@ export default function BillingDetailPage() {
             <div>
               <div className="flex items-center space-x-3">
                 <h1 className="text-2xl font-bold text-gray-900">{document.documentNumber || 'Draft Invoice'}</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-                  {document.type}
-                </span>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
-                  {document.status}
-                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">{document.type}</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>{document.status}</span>
               </div>
               <p className="mt-1 text-sm text-gray-500">
                 Created on {new Date(document.date).toLocaleDateString()} • Due {new Date(document.dueDate).toLocaleDateString()}
@@ -164,13 +136,8 @@ export default function BillingDetailPage() {
           <div className="flex flex-wrap gap-2">
             {document.status === DocumentStatus.Draft && (
               <>
-                <button onClick={() => submitForApproval(document.id)} className="btn-secondary text-sm px-3 py-2 border rounded hover:bg-gray-50">
-                  Submit for Approval
-                </button>
-                <button
-                  onClick={() => navigate(`/finance/billing/new?id=${document.id}`)}
-                  className="btn-secondary text-sm px-3 py-2 border rounded hover:bg-gray-50 flex items-center"
-                >
+                <button onClick={() => submitForApproval(document.id)} className="text-sm px-3 py-2 border rounded hover:bg-gray-50">Submit for Approval</button>
+                <button onClick={() => navigate(`/finance/billing/new?id=${document.id}`)} className="text-sm px-3 py-2 border rounded hover:bg-gray-50 flex items-center">
                   <Edit2 className="h-4 w-4 mr-1" /> Edit
                 </button>
               </>
@@ -180,22 +147,17 @@ export default function BillingDetailPage() {
                 <button onClick={() => approveDocument(document.id)} className="bg-green-600 text-white text-sm px-3 py-2 rounded hover:bg-green-700 flex items-center">
                   <CheckCircle className="h-4 w-4 mr-1" /> Approve
                 </button>
-                <button onClick={() => returnToDraft(document.id)} className="bg-gray-100 text-gray-700 text-sm px-3 py-2 rounded hover:bg-gray-200">
-                  Return to Draft
-                </button>
+                <button onClick={() => returnToDraft(document.id)} className="bg-gray-100 text-gray-700 text-sm px-3 py-2 rounded hover:bg-gray-200">Return to Draft</button>
               </>
             )}
             {document.status === DocumentStatus.Approved && (
-              <button onClick={() => issueDocument(document.id)} className="bg-primary-600 text-white text-sm px-3 py-2 rounded hover:bg-primary-700 flex items-center">
+              <button onClick={() => issueDocument(document.id)} className="bg-indigo-600 text-white text-sm px-3 py-2 rounded hover:bg-indigo-700 flex items-center">
                 <FileText className="h-4 w-4 mr-1" /> Issue Document
               </button>
             )}
             {(document.status === DocumentStatus.Issued || document.status === DocumentStatus.Sent || document.status === DocumentStatus.PartiallyPaid || document.status === DocumentStatus.Overdue) && (
               <>
-                <button
-                  onClick={() => { setPaymentAmount(document.balance); setIsPaymentModalOpen(true); }}
-                  className="bg-green-600 text-white text-sm px-3 py-2 rounded hover:bg-green-700 flex items-center"
-                >
+                <button onClick={() => { setPaymentAmount(document.balance); setIsPaymentModalOpen(true); }} className="bg-green-600 text-white text-sm px-3 py-2 rounded hover:bg-green-700 flex items-center">
                   <CreditCard className="h-4 w-4 mr-1" /> Record Payment
                 </button>
                 {document.status === DocumentStatus.Issued && (
@@ -215,9 +177,7 @@ export default function BillingDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-200">
-              <h3 className="text-lg font-medium leading-6 text-gray-900">Line Items</h3>
-            </div>
+            <div className="px-6 py-5 border-b border-gray-200"><h3 className="text-lg font-medium leading-6 text-gray-900">Line Items</h3></div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -230,7 +190,7 @@ export default function BillingDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {document.lines.map((line) => (
+                  {document.lines.map(line => (
                     <tr key={line.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{line.description}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{line.quantity}</td>
@@ -244,30 +204,18 @@ export default function BillingDetailPage() {
             </div>
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
               <div className="flex flex-col items-end space-y-2">
-                <div className="flex justify-between w-64 text-sm text-gray-600">
-                  <span>Subtotal:</span><span>{formatCurrency(document.subtotal)}</span>
-                </div>
-                <div className="flex justify-between w-64 text-sm text-gray-600">
-                  <span>Tax Total:</span><span>{formatCurrency(document.taxTotal)}</span>
-                </div>
-                <div className="flex justify-between w-64 text-base font-bold text-gray-900 border-t border-gray-300 pt-2">
-                  <span>Total:</span><span>{formatCurrency(document.total)}</span>
-                </div>
-                <div className="flex justify-between w-64 text-sm text-green-600">
-                  <span>Paid to Date:</span><span>{formatCurrency(document.paidAmount)}</span>
-                </div>
-                <div className="flex justify-between w-64 text-base font-bold text-indigo-600 border-t border-gray-300 pt-2">
-                  <span>Balance Due:</span><span>{formatCurrency(document.balance)}</span>
-                </div>
+                <div className="flex justify-between w-64 text-sm text-gray-600"><span>Subtotal:</span><span>{formatCurrency(document.subtotal)}</span></div>
+                <div className="flex justify-between w-64 text-sm text-gray-600"><span>Tax Total:</span><span>{formatCurrency(document.taxTotal)}</span></div>
+                <div className="flex justify-between w-64 text-base font-bold text-gray-900 border-t border-gray-300 pt-2"><span>Total:</span><span>{formatCurrency(document.total)}</span></div>
+                <div className="flex justify-between w-64 text-sm text-green-600"><span>Paid to Date:</span><span>{formatCurrency(document.paidAmount)}</span></div>
+                <div className="flex justify-between w-64 text-base font-bold text-indigo-600 border-t border-gray-300 pt-2"><span>Balance Due:</span><span>{formatCurrency(document.balance)}</span></div>
               </div>
             </div>
           </div>
 
           {relatedPayments.length > 0 && (
             <div className="bg-white shadow rounded-lg overflow-hidden">
-              <div className="px-6 py-5 border-b border-gray-200">
-                <h3 className="text-lg font-medium leading-6 text-gray-900">Payment History</h3>
-              </div>
+              <div className="px-6 py-5 border-b border-gray-200"><h3 className="text-lg font-medium leading-6 text-gray-900">Payment History</h3></div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -323,7 +271,6 @@ export default function BillingDetailPage() {
               <p>{counterparty?.phone}</p>
             </div>
           </div>
-
           {document.notes && (
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Notes</h3>
@@ -341,44 +288,28 @@ export default function BillingDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Amount</label>
                 <div className="mt-1 relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">$</span>
-                  </div>
-                  <input
-                    type="number" step="0.01" required max={document.balance}
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value))}
-                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">{document.currency}</span>
-                  </div>
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-gray-500 sm:text-sm">$</span></div>
+                  <input type="number" step="0.01" required max={document.balance} value={paymentAmount} onChange={e => setPaymentAmount(parseFloat(e.target.value))}
+                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md" />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"><span className="text-gray-500 sm:text-sm">{document.currency}</span></div>
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
-                <input type="date" required value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
+                <input type="date" required value={paymentDate} onChange={e => setPaymentDate(e.target.value)}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Method</label>
-                <select value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                >
-                  {Object.values(PaymentMethod).map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
+                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                  {Object.values(PaymentMethod).map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Reference / Check #</label>
-                <input type="text" value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
+                <input type="text" value={paymentReference} onChange={e => setPaymentReference(e.target.value)}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
               </div>
               <div className="mt-5 sm:mt-6 flex space-x-3">
                 <button type="button" onClick={() => setIsPaymentModalOpen(false)}
@@ -386,7 +317,7 @@ export default function BillingDetailPage() {
                   Cancel
                 </button>
                 <button type="submit"
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none sm:text-sm">
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none sm:text-sm">
                   Record Payment
                 </button>
               </div>
