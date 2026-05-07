@@ -7,86 +7,99 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // ── Helper: counter write guard ────────────────────────────────────────────
+    function isValidCounterWrite() {
+      return isAuthenticated()
+        && request.resource.data.keys().hasOnly(['lastSequence'])
+        && request.resource.data.lastSequence is int
+        && request.resource.data.lastSequence > 0;
+    }
+
     // ── Platform-wide shared ────────────────────────────────────────────────
 
     match /shared_clients/{document=**} {
       allow read, write: if isAuthenticated();
     }
-
     match /platform_settings/{document=**} {
       allow read, write: if isAuthenticated();
     }
 
-    // ── Finance ─────────────────────────────────────────────────────────────
+    // ── Finance ───────────────────────────────────────────────────────────────
 
-    match /projects/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /billingDocuments/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /payments/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /subscriptions/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /counterparties/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /products/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /legalEntities/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /budgetCategories/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
+    match /projects/{document=**}         { allow read, write: if isAuthenticated(); }
+    match /billingDocuments/{document=**}  { allow read, write: if isAuthenticated(); }
+    match /payments/{document=**}          { allow read, write: if isAuthenticated(); }
+    match /subscriptions/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /counterparties/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /products/{document=**}          { allow read, write: if isAuthenticated(); }
+    match /legalEntities/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /budgetCategories/{document=**}  { allow read, write: if isAuthenticated(); }
+
+    // transactions — create-only. These are immutable audit records written by
+    // issueDocument(). No authenticated user should be able to alter or delete
+    // them; doing so would corrupt the financial audit trail.
     match /transactions/{document=**} {
-      allow read, write: if isAuthenticated();
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
     }
-    match /appSettings/{document=**} {
-      allow read, write: if isAuthenticated();
+
+    match /appSettings/invoiceCounter {
+      allow read:  if isAuthenticated();
+      allow write: if isValidCounterWrite();
+    }
+    match /appSettings/offerCounter {
+      allow read:  if isAuthenticated();
+      allow write: if isValidCounterWrite();
+    }
+    match /appSettings/{docId} {
+      allow read:  if isAuthenticated();
+      allow write: if isAuthenticated()
+        && docId != 'invoiceCounter'
+        && docId != 'offerCounter';
     }
 
     // ── CMS ─────────────────────────────────────────────────────────────────
 
-    match /cms_contracts/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_clients/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_templates/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_projects/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
-    match /cms_settings/{document=**} {
-      allow read, write: if isAuthenticated();
-    }
+    match /cms_contracts/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /cms_clients/{document=**}      { allow read, write: if isAuthenticated(); }
+    match /cms_templates/{document=**}    { allow read, write: if isAuthenticated(); }
+    match /cms_projects/{document=**}     { allow read, write: if isAuthenticated(); }
+    match /cms_settings/{document=**}     { allow read, write: if isAuthenticated(); }
 
     // ── Offers ──────────────────────────────────────────────────────────────
-    // Offer documents embed sections, line_items, notes, and workflow_log
-    // as arrays — no subcollections in Phase 1.
 
     match /offers/{offerId} {
       allow read:   if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
-      allow delete: if false; // soft-delete via status='archived' only
+      allow delete: if false;
+
+      match /workflow_log/{entryId} {
+        allow read, create:   if isAuthenticated();
+        allow update, delete: if false;
+      }
+      match /notes/{noteId} {
+        allow read, create, update: if isAuthenticated();
+        allow delete:               if false;
+      }
+      match /versions/{versionId} {
+        allow read, create:   if isAuthenticated();
+        allow update, delete: if false;
+      }
     }
 
     match /offer_templates/{templateId} {
       allow read:   if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
-      allow delete: if false; // archive only
+      allow delete: if false;
     }
 
-    // ── Default deny ────────────────────────────────────────────────────────
+    match /offer_settings/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ── Default deny ──────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
