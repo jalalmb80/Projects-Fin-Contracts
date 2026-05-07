@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // ── Helper: counter write guard ────────────────────────────────────────────
+    // ── Helper: counter write guard ─────────────────────────────────────────
     function isValidCounterWrite() {
       return isAuthenticated()
         && request.resource.data.keys().hasOnly(['lastSequence'])
@@ -15,7 +15,7 @@ service cloud.firestore {
         && request.resource.data.lastSequence > 0;
     }
 
-    // ── Platform-wide shared ────────────────────────────────────────────────
+    // ── Platform-wide shared ─────────────────────────────────────────────────
 
     match /shared_clients/{document=**} {
       allow read, write: if isAuthenticated();
@@ -24,7 +24,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // ── Finance ───────────────────────────────────────────────────────────────
+    // ── Finance ──────────────────────────────────────────────────────────────
 
     match /projects/{document=**}         { allow read, write: if isAuthenticated(); }
     match /billingDocuments/{document=**}  { allow read, write: if isAuthenticated(); }
@@ -35,9 +35,7 @@ service cloud.firestore {
     match /legalEntities/{document=**}     { allow read, write: if isAuthenticated(); }
     match /budgetCategories/{document=**}  { allow read, write: if isAuthenticated(); }
 
-    // transactions — create-only. These are immutable audit records written by
-    // issueDocument(). No authenticated user should be able to alter or delete
-    // them; doing so would corrupt the financial audit trail.
+    // transactions — create-only immutable audit records.
     match /transactions/{document=**} {
       allow read, create: if isAuthenticated();
       allow update, delete: if false;
@@ -58,7 +56,7 @@ service cloud.firestore {
         && docId != 'offerCounter';
     }
 
-    // ── CMS ─────────────────────────────────────────────────────────────────
+    // ── CMS ──────────────────────────────────────────────────────────────────
 
     match /cms_contracts/{document=**}    { allow read, write: if isAuthenticated(); }
     match /cms_clients/{document=**}      { allow read, write: if isAuthenticated(); }
@@ -66,7 +64,7 @@ service cloud.firestore {
     match /cms_projects/{document=**}     { allow read, write: if isAuthenticated(); }
     match /cms_settings/{document=**}     { allow read, write: if isAuthenticated(); }
 
-    // ── Offers ──────────────────────────────────────────────────────────────
+    // ── Offers ───────────────────────────────────────────────────────────────
 
     match /offers/{offerId} {
       allow read:   if isAuthenticated();
@@ -99,7 +97,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // ── Default deny ──────────────────────────────────────────────────────
+    // ── Default deny ─────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

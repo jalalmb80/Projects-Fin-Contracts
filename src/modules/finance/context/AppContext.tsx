@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { useToast } from '../components/ui/Toast';
-import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
   writeBatch,
   runTransaction,
   Query
@@ -17,15 +17,15 @@ import { User } from 'firebase/auth';
 import { db } from '../../../core/firebase';
 import { usePlatform } from '../../../core/context/PlatformContext';
 import { useSharedClients } from '../../../core/hooks/useSharedClients';
-import { 
-  Project, 
-  BillingDocument, 
-  Payment, 
-  Subscription, 
-  Counterparty, 
-  Product, 
-  LegalEntity, 
-  BudgetCategory, 
+import {
+  Project,
+  BillingDocument,
+  Payment,
+  Subscription,
+  Counterparty,
+  Product,
+  LegalEntity,
+  BudgetCategory,
   AppSettings,
   Transaction,
   MilestoneStatus,
@@ -393,7 +393,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         else if (sub.billingCycle === 'Yearly')    nextDate.setFullYear(nextDate.getFullYear() + 1);
         else if (sub.billingCycle === 'Custom')    nextDate.setDate(nextDate.getDate() + (sub.billingInterval ?? 30));
         const invoice: BillingDocument = {
-          id: invoiceId, type: DocumentType.Invoice, direction: sub.direction === 'AR' ? DocumentDirection.AR : DocumentDirection.AP,
+          id: invoiceId, type: DocumentType.Invoice,
+          direction: sub.direction === 'AR' ? DocumentDirection.AR : DocumentDirection.AP,
           status: DocumentStatus.Draft, date: today,
           dueDate: new Date(Date.now() + sub.paymentTermsDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           counterpartyId: sub.counterpartyId, counterpartyName: asFinanceCounterparties.find(c => c.id === sub.counterpartyId)?.name || 'Unknown',
