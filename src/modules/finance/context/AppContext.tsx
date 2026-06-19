@@ -202,8 +202,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // snap() — DRY helper for collection listeners.
     // q is typed as Query<any> (not Parameters<typeof query>[0]) to avoid
     // TypeScript errors from the overloaded Firebase query() function signature.
-    // col is cast to keyof AppState['loading'] for the error handler — safe
-    // because every call site passes a valid loading-state key.
     const snap = (
       col: keyof AppState['loading'],
       q: Query<any>

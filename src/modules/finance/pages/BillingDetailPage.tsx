@@ -91,6 +91,10 @@ export default function BillingDetailPage() {
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: document.currency, maximumFractionDigits: 2 }).format(amount);
 
+  // handlePaymentSubmit — routes through allocatePayment() so the payment
+  // appears in payment.allocations[] and invoice.paidAmount is updated
+  // atomically via Firestore transaction. The old pattern called recordPayment
+  // then manually updateBillingDocument, which bypassed the allocation index.
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentAmount <= 0 || paymentAmount > document.balance) {

@@ -102,7 +102,7 @@ export default function Dashboard() {
 
     const arApData = [
       { name: t('الذمم المدينة', 'Receivables', lang), value: totalAR, color: '#4f46e5' },
-      { name: t('الذمم الدائنة', 'Payables',    lang), value: totalAP, color: '#ef4444' },
+      { name: t('الذمم الدائنة',    'Payables',    lang), value: totalAP, color: '#ef4444' },
     ].filter(d => d.value > 0);
 
     const recentInvoices = [...invoices]
