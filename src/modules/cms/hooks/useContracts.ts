@@ -60,7 +60,7 @@ export function useContracts() {
 
   /**
    * addWorkflowEvent — uses Firestore arrayUnion so concurrent writes from
-   * different users never overwrite each other’s events.
+   * different users never overwrite each other's events.
    *
    * Previous implementation read workflow_events from in-memory React state
    * and spread a new array into updateDoc. Under concurrent edits both writers

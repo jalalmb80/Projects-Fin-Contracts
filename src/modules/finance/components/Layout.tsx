@@ -21,6 +21,8 @@ export default function Layout() {
   const [isMobileMenuOpen,   setIsMobileMenuOpen]   = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // Platform Settings (/settings) is in the platform sidebar (ModuleSwitcher).
+  // It is intentionally NOT duplicated here.
   const navigation = [
     { name_en: 'Dashboard',      name_ar: 'لوحة التحكم',              href: '/finance/dashboard',      icon: LayoutDashboard },
     { name_en: 'Projects',       name_ar: 'المشاريع',                       href: '/finance/projects',       icon: Briefcase },
@@ -159,7 +161,7 @@ export default function Layout() {
               {displayCurrency}
             </button>
             <button onClick={toggleDarkMode} className="p-1 text-slate-500 hover:text-slate-700">
-              {document.documentElement.classList.contains('dark') ? <Sun size={20} /> : <Moon size={20} />}
+              {document.documentElement.classList.contains('dark') ? <Moon size={20} /> : <Moon size={20} />}
             </button>
             <div className="relative">
               <Bell size={20} className="text-slate-500" />
