@@ -1,131 +1,98 @@
 # 08 — Known Issues & Remaining Work
 
-This document captures everything that is known to be incomplete, imperfect, or deferred. Updated as of 2026-04-20.
+Updated as of 2026-04-28 (CMSProvider — issue #1 resolved).
 
 ---
 
 ## Open issues
 
-### 1. `useContracts` creates multiple listener instances
-
-**Severity:** Medium (cost / performance)  
-**File:** `src/modules/cms/hooks/useContracts.ts`
-
-The hook is called independently by each CMS page that mounts. If two CMS pages are rendered simultaneously, duplicate `onSnapshot` listeners open. This doubles read costs.
-
-**Fix:** Lift `useContracts` into a `CMSProvider` context (similar to AppContext for Finance) and call it once at the `CMSLayout` level.
-
----
-
 ### 2. Dark mode is partially implemented
-
 **Severity:** Low  
-**File:** `src/modules/finance/components/Layout.tsx`
-
-The toggle correctly sets the `dark` class on `document.documentElement`. However, `dark:` variant styles are not defined across Finance components — the toggle works mechanically but has no visual effect.
-
-The CMS module is unaffected.
+Toggle sets `dark` class on `document.documentElement` but Finance components have no `dark:` variants.
 
 ---
 
 ### 3. Google Drive integration is incomplete
-
 **Severity:** Low  
-**File:** `src/modules/cms/services/googleDrive.ts`
-
-The Google Drive OAuth flow is implemented and the upload button is wired in the contract Preview tab. However, attachments uploaded via the Attachments tab are not synced to Drive.
+OAuth flow + contract preview upload work; Attachments tab files not synced.
 
 ---
 
 ### 4. BillingDetailPage Edit button is non-functional
-
 **Severity:** Medium  
-**File:** `src/modules/finance/pages/BillingDetailPage.tsx`
-
-The Edit button on draft invoices renders but has no `onClick` handler and no route.
+Edit button on draft invoices has no `onClick` handler and no route.
 
 ---
 
 ### 5. Subscription `billingInterval` field unused
-
 **Severity:** Low  
-**File:** `src/modules/finance/types.ts`
-
-`Subscription.billingInterval` exists in the type but is not consumed by `runBillingJob`. Intended to support `BillingCycle.Custom` intervals — not yet implemented.
+`Subscription.billingInterval` not consumed by `runBillingJob`.
 
 ---
 
 ### 6. Payment allocation flow is simplified
-
-**Severity:** Medium (correctness)  
-**File:** `src/modules/finance/pages/BillingDetailPage.tsx`
-
-"Record Payment" creates a payment and updates balance directly, bypassing `allocatePayment()`. Payments recorded this way won't appear in `payment.allocations[]`.
+**Severity:** Medium  
+"Record Payment" bypasses `allocatePayment()`; payments won't appear in `allocations[]`.
 
 ---
 
-### 7. Workflow tab "تغيير الحالة" button navigates to Metadata tab
-
-**Severity:** Low (UX)  
-**File:** `src/modules/cms/components/ContractEditor.tsx`
-
-The "تغيير الحالة" button in the WorkflowTimeline tab navigates the user to the Metadata tab where the status select is located. A future improvement would be to open the `WorkflowTransitionModal` directly from the workflow tab with a status-picker step, without requiring the tab switch. This was a deliberate trade-off to avoid duplicating the status-select UI.
+### 7. CMS workflow tab "تغيير الحالة" navigates to Metadata tab
+**Severity:** Low (UX)
 
 ---
 
-### 8. KPI trend values on Dashboard are static
-
+### 8. KPI trend values on Finance Dashboard are static
 **Severity:** Low (UX)  
-**File:** `src/modules/finance/pages/DashboardPage.tsx`
+`trend` prop on KpiCard is hardcoded.
 
-The `trend` prop on KpiCard (e.g. `+12% vs last month`) is hardcoded. A future improvement would compute these by comparing the current month's total against the previous month using the same invoice-grouping logic already applied to the Revenue Trend chart.
+---
+
+### 10. Offers: `expired` status has no inbound transition
+**Severity:** Low (arch debt)  
+Intended for a scheduled Cloud Function checking `expiry_date < today`.
+
+---
+
+### 14. OFFER_WON modal only appears when CMS is mounted
+**Severity:** Low (UX)  
+`CMSOfferWonHandler` is inside `CMSLayout`. If the user is on Finance or Offers when marking Won, the Create Contract modal will not appear.  
+**Fix (future):** Move handler to `AppShell` with a platform-level notification badge.
+
+---
+
+### 15. Offer version snapshots: no restore UI
+**Severity:** Low (arch debt)  
+History tab shows versions; copying a snapshot back to the live offer is not yet implemented.
 
 ---
 
 ## Architectural debt
 
-### A. CMS module lacks a shared context
+### B. No role-based access control
+All authenticated users have full read/write. `isValidCounterWrite()` now protects counters. Full RBAC requires Firebase Custom Claims.
 
-Each CMS page opens its own Firestore listeners. A `CMSProvider` wrapping CMS routes would open listeners once and share data — matching the Finance module's pattern.
+### C. No automated tests
+`npm run lint` runs `tsc --noEmit` only.
 
-### B. CMS and Finance use separate project registries
-
-A Finance project and a CMS project represent similar real-world entities but use different schemas and collections. The `platformBus` integration (contract signed → billing form pre-filled) is a workaround.
-
-### C. No role-based access control
-
-All authenticated users have full read/write access. Extension requires a `role` field per user in Firestore or Firebase custom claims.
-
-### D. No automated tests
-
-The project has no unit, integration, or E2E tests. `npm run lint` runs `tsc --noEmit` for type checking only.
+### D. Offers status labels not settings-driven
+Hardcoded in `types.ts`. Future: `offer_settings/general.offer_statuses[]`.
 
 ---
 
 ## Completed items (for reference)
 
-- ✅ `ToastProvider` missing → crash on Subscriptions/Products/ProjectDetail
-- ✅ AppContext notification system (wrote to state, never rendered)
-- ✅ `useContracts` opened listeners before auth was confirmed
-- ✅ `CMSDashboard` used `c.created_at` (non-existent field)
-- ✅ `PlatformContext` opened duplicate Firestore listeners
-- ✅ `ContractsPage` called `useContracts()` twice; `setContracts`/`setTemplates` were no-ops
-- ✅ `CMSClientsPage` and `CMSProjectsPage` called Firestore directly
-- ✅ Invoice number race condition (fixed with `runTransaction`)
-- ✅ `LoginPage` was imported from Finance module by AppShell
-- ✅ `CounterpartiesPage` / forms used service files instead of AppContext
-- ✅ `useContracts` snapshot mapping missing `id: d.id` spread
-- ✅ `cms_projects` missing from Firestore rules
-- ✅ `cms_settings` missing from Firestore rules
-- ✅ AppContext `getDocs` missing `id: d.id` spread
-- ✅ `SubscriptionForm` hardcoded `legalEntityId: 'default'`
-- ✅ `CMSProjectsPage` used English status values
-- ✅ `CMSClientsPage` form fields didn't match `Client` type
-- ✅ `alert()` calls replaced with toast / inline feedback
-- ✅ Currency toggle wired to `setDisplayCurrency()`
-- ✅ Dark mode toggle wired to `document.documentElement.classList`
-- ✅ Dead service files, ProtectedRoute, temp files deleted
-- ✅ **Contract workflow feature** — full audit trail (transitions + notes), workflow roles settings, timeline tab, ContractsList integration (2026-04-19)
-- ✅ **Dashboard enhanced** — real revenue trend, 6 KPI cards, time-aware greeting, overdue quick-link, tEnum status badges, bilingual pie legend (2026-04-20)
-- ✅ **ProjectListPage enhanced** — tEnum status/dropdown, end date column with overdue indicator, result count, budget overflow badge, summary footer (2026-04-20)
-- ✅ **ProjectDetailPage fully i18n** — tabs translated, all labels bilingual via t()/tEnum(), tab key system type-safe (2026-04-20)
+- ✅ `ToastProvider` missing → crash on Finance pages
+- ✅ All `console.log` in AppContext → `addToast()`
+- ✅ `useContracts` opened listeners before auth confirmed
+- ✅ Invoice number race condition (`runTransaction`)
+- ✅ All `alert()` calls replaced
+- ✅ **CMS workflow feature** — full audit trail, roles config, timeline (2026-04-19)
+- ✅ **Finance i18n** — Dashboard, ProjectListPage, ProjectDetailPage (2026-04-20)
+- ✅ **Offers Phase 0** — OffersProvider, atomic numbering, subcollections (2026-04-28)
+- ✅ **Offers Phase 1** — WorkflowAssignee, modals, system note batched (2026-04-28)
+- ✅ **Offers Phase 2** — OfferPreviewPortal + PDF export (2026-04-28)
+- ┅ **Offers Phase 3** — OfferVersion subcollection + OFFER_WON → CreateContractFromOfferModal (2026-04-28)
+- ✅ **Offers Phase 4** — OfferTemplateEditor, bilingual labels, shared PDF engine (2026-04-28)
+- ✅ **Security A1** — GEMINI_API_KEY removed from vite.config.ts define block (2026-04-28)
+- ✅ **Security A2/A3** — Firestore counter rules: isValidCounterWrite() for invoiceCounter + offerCounter; wildcard guard prevents override (2026-04-28)
+- ✅ **CMS Arch A** — CMSProvider context: useContracts() runs once at CMSLayout level; 5 CMS pages now call useCMSContext() — eliminates up to 15 duplicate onSnapshot connections (2026-04-28)
