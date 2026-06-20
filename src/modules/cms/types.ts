@@ -20,14 +20,15 @@ export interface PartyOneEntity {
   is_default: boolean;
 }
 
-// ── Contract status config ────────────────────────────────────────────────────
-export interface ContractStatusConfig {
+interface ContractStatusConfig {
   id: string;
   label: string;
   is_win: boolean;
   is_lose: boolean;
   color?: string;
 }
+
+export type { ContractStatusConfig };
 
 export interface AppSettings {
   entities: PartyOneEntity[];
@@ -42,33 +43,12 @@ export type ContractType   = string;
 
 export type AppendixType = 'قائمة الخدمات' | 'التهيئة التقنية' | 'العرض الفني' | 'قائمة الأسعار' | 'أخرى';
 export type ArticleType  = 'تمهيد' | 'موضوع' | 'مدة التنفيذ' | 'القيمة والدفعات' | 'الملكية الفكرية' | 'إدارة المشروع' | 'طلبات التغيير' | 'إنهاء الاتفاقية' | 'أحكام عامة' | 'نسخ الاتفاقية' | 'مخصص';
-
 export type ArticleBlockType = 'paragraph' | 'list' | 'page_break';
 
-export interface ParagraphBlock {
-  id: string;
-  type: 'paragraph';
-  text_ar: string;
-}
-
-export interface ListBlockItem {
-  id: string;
-  text_ar: string;
-}
-
-export interface ListBlock {
-  id: string;
-  type: 'list';
-  style: 'ordered' | 'unordered' | 'alpha';
-  items: ListBlockItem[];
-}
-
-export interface PageBreakBlock {
-  id: string;
-  type: 'page_break';
-  label?: string;
-}
-
+export interface ParagraphBlock { id: string; type: 'paragraph'; text_ar: string; }
+export interface ListBlockItem  { id: string; text_ar: string; }
+export interface ListBlock      { id: string; type: 'list'; style: 'ordered' | 'unordered' | 'alpha'; items: ListBlockItem[]; }
+export interface PageBreakBlock { id: string; type: 'page_break'; label?: string; }
 export type ArticleBlock = ParagraphBlock | ListBlock | PageBreakBlock;
 
 export interface Client {
@@ -150,34 +130,21 @@ export interface ContractVersion {
   snapshot: Omit<Contract, 'versions'>;
 }
 
-// ── Workflow ──────────────────────────────────────────────────────────────────
-
-/**
- * The person/team responsible for the next action after this event.
- * role  = selected from the configurable workflow_roles list (or free-typed if 'أخرى')
- * name  = always free text — the actual individual's name
- */
 export interface WorkflowAssignee {
   role: string;
   name: string;
 }
 
-/**
- * A single entry in the contract's audit trail.
- *
- * type === 'transition'  → status changed from from_status to to_status
- * type === 'note'        → from_status === to_status (status unchanged, note added)
- */
 export interface WorkflowEvent {
   id: string;
   type: 'transition' | 'note';
-  from_status: string | null;   // null reserved for future first-event use
+  from_status: string | null;
   to_status: string;
   assignee: WorkflowAssignee;
-  note: string;                 // required for 'note' type; optional for 'transition'
-  actor_name: string;           // Firebase user displayName ?? email prefix
+  note: string;
+  actor_name: string;
   actor_email: string;
-  created_at: string;           // ISO timestamp
+  created_at: string;
 }
 
 export type ProjectType =
@@ -225,8 +192,8 @@ export interface Contract {
   attachments: Attachment[];
   versions: ContractVersion[];
   tags: string[];
-  /** Workflow audit trail. Absent on pre-workflow contracts — always read as ?? [] */
   workflow_events?: WorkflowEvent[];
+  linked_offer_id?: string;
 }
 
 export type ContractTemplateCategory =
@@ -251,7 +218,6 @@ export interface ContractTemplate {
   is_default?: boolean;
 }
 
-// ── Default lists ─────────────────────────────────────────────────────────────
 export const DEFAULT_CONTRACT_STATUSES: ContractStatusConfig[] = [
   { id: 'draft',     label: 'مسودة',        is_win: false, is_lose: false, color: 'gray'    },
   { id: 'review',    label: 'قيد المراجعة', is_win: false, is_lose: false, color: 'yellow'  },
