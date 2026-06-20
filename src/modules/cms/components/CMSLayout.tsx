@@ -1,13 +1,59 @@
-import React from 'react';
+/**
+ * CMSLayout — shell for the CMS module.
+ *
+ * Provider mount order (outermost → innermost):
+ *   LanguageProvider    — t() / useLang() for AR/EN toggling
+ *   SettingsProvider    — contract statuses, types, workflow roles
+ *   CMSProvider         — Firestore listeners (contracts, templates, projects)
+ *   CMSLayoutInner      — sidebar + Outlet + OFFER_WON handler
+ *
+ * CMSProvider runs useContracts() exactly once here.
+ * All CMS pages call useCMSContext() — no duplicate listeners.
+ *
+ * CMSOfferWonHandler subscribes to the platformBus OFFER_WON event
+ * and opens CreateContractFromOfferModal when an offer is won.
+ * The handler only fires when CMS is mounted.
+ */
+import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { LanguageProvider, useLang } from '../context/LanguageContext';
 import { SettingsProvider, useSettings } from '../context/SettingsContext';
+import { CMSProvider } from '../context/CMSContext';
+import { platformBus, PLATFORM_EVENTS } from '../../../core/events/platformBus';
 import Sidebar from './Sidebar';
+import CreateContractFromOfferModal from './CreateContractFromOfferModal';
+
+interface OfferWonPayload {
+  offerId:     string;
+  offerNumber: string;
+  clientId:    string;
+  clientName:  string;
+  totalValue:  number;
+}
+
+function CMSOfferWonHandler() {
+  const [wonPayload, setWonPayload] = useState<OfferWonPayload | null>(null);
+
+  useEffect(() => {
+    return platformBus.on(PLATFORM_EVENTS.OFFER_WON, (payload: OfferWonPayload) => {
+      setWonPayload(payload);
+    });
+  }, []);
+
+  if (!wonPayload) return null;
+
+  return (
+    <CreateContractFromOfferModal
+      payload={wonPayload}
+      onClose={() => setWonPayload(null)}
+    />
+  );
+}
 
 function CMSLayoutInner() {
   const { settingsLoading } = useSettings();
-  const { lang } = useLang();
-  const isRTL = lang === 'ar';
+  const { lang }            = useLang();
+  const isRTL               = lang === 'ar';
 
   if (settingsLoading) {
     return (
@@ -20,11 +66,9 @@ function CMSLayoutInner() {
     );
   }
 
-  // dir="rtl": CSS direction:rtl makes flex first-child render on the RIGHT → Sidebar on right in Arabic ✓
-  // dir="ltr": first-child renders on the LEFT → Sidebar on left in English ✓
-  // Always put Sidebar first in DOM — let `dir` handle the visual position.
   return (
     <div className="flex h-full w-full" dir={isRTL ? 'rtl' : 'ltr'}>
+      <CMSOfferWonHandler />
       <Sidebar />
       <div className="flex-1 overflow-y-auto bg-slate-50">
         <Outlet />
@@ -37,7 +81,9 @@ export default function CMSLayout() {
   return (
     <LanguageProvider>
       <SettingsProvider>
-        <CMSLayoutInner />
+        <CMSProvider>
+          <CMSLayoutInner />
+        </CMSProvider>
       </SettingsProvider>
     </LanguageProvider>
   );
