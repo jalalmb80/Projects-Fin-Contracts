@@ -35,9 +35,6 @@ service cloud.firestore {
     match /legalEntities/{document=**}     { allow read, write: if isAuthenticated(); }
     match /budgetCategories/{document=**}  { allow read, write: if isAuthenticated(); }
 
-    // transactions — create-only. These are immutable audit records written by
-    // issueDocument(). No authenticated user should be able to alter or delete
-    // them; doing so would corrupt the financial audit trail.
     match /transactions/{document=**} {
       allow read, create: if isAuthenticated();
       allow update, delete: if false;
@@ -47,10 +44,12 @@ service cloud.firestore {
       allow read:  if isAuthenticated();
       allow write: if isValidCounterWrite();
     }
+
     match /appSettings/offerCounter {
       allow read:  if isAuthenticated();
       allow write: if isValidCounterWrite();
     }
+
     match /appSettings/{docId} {
       allow read:  if isAuthenticated();
       allow write: if isAuthenticated()
@@ -78,10 +77,12 @@ service cloud.firestore {
         allow read, create:   if isAuthenticated();
         allow update, delete: if false;
       }
+
       match /notes/{noteId} {
         allow read, create, update: if isAuthenticated();
         allow delete:               if false;
       }
+
       match /versions/{versionId} {
         allow read, create:   if isAuthenticated();
         allow update, delete: if false;
@@ -99,7 +100,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // ── Default deny ──────────────────────────────────────────────────────
+    // ── Default deny ────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
