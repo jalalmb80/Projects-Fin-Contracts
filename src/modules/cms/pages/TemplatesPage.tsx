@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import TemplatesList from '../components/TemplatesList';
 import TemplateEditor from '../components/TemplateEditor';
-import { useContracts } from '../hooks/useContracts';
+import { useCMSContext } from '../context/CMSContext';
 import { ContractTemplate } from '../types';
 
 export default function TemplatesPage() {
-  const { templates, addTemplate, updateTemplate, deleteTemplate } = useContracts();
+  const { templates, addTemplate, updateTemplate, deleteTemplate } = useCMSContext();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
 
@@ -29,7 +29,6 @@ export default function TemplatesPage() {
     }
   };
 
-  // BUG-8 FIX: use h-full on wrapper so TemplateEditor fills the viewport
   if (showEditor) {
     return (
       <div className="h-full flex flex-col">
