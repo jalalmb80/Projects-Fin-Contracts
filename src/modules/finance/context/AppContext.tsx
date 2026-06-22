@@ -66,12 +66,26 @@ interface AppState {
 }
 
 const initialState: AppState = {
-  projects: [], billingDocuments: [], payments: [], subscriptions: [],
-  counterparties: [], products: [], legalEntities: [], budgetCategories: [],
-  settings: INITIAL_SETTINGS, displayCurrency: INITIAL_SETTINGS.defaultCurrency,
+  projects: [],
+  billingDocuments: [],
+  payments: [],
+  subscriptions: [],
+  counterparties: [],
+  products: [],
+  legalEntities: [],
+  budgetCategories: [],
+  settings: INITIAL_SETTINGS,
+  displayCurrency: INITIAL_SETTINGS.defaultCurrency,
   loading: {
-    projects: true, billingDocuments: true, payments: true, subscriptions: true,
-    counterparties: false, products: true, legalEntities: true, budgetCategories: true, settings: true,
+    projects: true,
+    billingDocuments: true,
+    payments: true,
+    subscriptions: true,
+    counterparties: false,
+    products: true,
+    legalEntities: true,
+    budgetCategories: true,
+    settings: true,
   },
   error: null,
 };
@@ -88,15 +102,24 @@ type AppAction =
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case 'SET_COLLECTION': return { ...state, [action.collection]: action.payload, loading: { ...state.loading, [action.collection]: false } };
-    case 'SET_SETTINGS':   return { ...state, settings: action.payload, loading: { ...state.loading, settings: false } };
-    case 'SET_DISPLAY_CURRENCY': return { ...state, displayCurrency: action.payload };
-    case 'SET_LOADING':    return { ...state, loading: { ...state.loading, [action.collection]: action.isLoading } };
-    case 'SET_ERROR':      return { ...state, error: action.payload };
-    case 'ADD_ITEM':    return { ...state, [action.collection]: [...(state[action.collection] as any[]), action.payload] };
-    case 'UPDATE_ITEM': return { ...state, [action.collection]: (state[action.collection] as any[]).map(i => i.id === action.payload.id ? { ...i, ...action.payload } : i) };
-    case 'DELETE_ITEM': return { ...state, [action.collection]: (state[action.collection] as any[]).filter(i => i.id !== action.id) };
-    default: return state;
+    case 'SET_COLLECTION':
+      return { ...state, [action.collection]: action.payload, loading: { ...state.loading, [action.collection]: false } };
+    case 'SET_SETTINGS':
+      return { ...state, settings: action.payload, loading: { ...state.loading, settings: false } };
+    case 'SET_DISPLAY_CURRENCY':
+      return { ...state, displayCurrency: action.payload };
+    case 'SET_LOADING':
+      return { ...state, loading: { ...state.loading, [action.collection]: action.isLoading } };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    case 'ADD_ITEM':
+      return { ...state, [action.collection]: [...(state[action.collection] as any[]), action.payload] };
+    case 'UPDATE_ITEM':
+      return { ...state, [action.collection]: (state[action.collection] as any[]).map(item => item.id === action.payload.id ? { ...item, ...action.payload } : item) };
+    case 'DELETE_ITEM':
+      return { ...state, [action.collection]: (state[action.collection] as any[]).filter(item => item.id !== action.id) };
+    default:
+      return state;
   }
 }
 
@@ -142,10 +165,11 @@ interface AppContextType extends AppState {
 }
 
 const AppContext = createContext<AppContextType | null>(null);
+
 export const useApp = () => {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within an AppProvider');
-  return ctx;
+  const context = useContext(AppContext);
+  if (!context) throw new Error('useApp must be used within an AppProvider');
+  return context;
 };
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
@@ -211,7 +235,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
       if (!project) throw new Error('Project not found');
-      await updateDoc(doc(db, 'projects', projectId), { milestones: [...project.milestones, { ...milestone, id: generateId(), projectId }], updatedAt: now() });
+      const newMilestone = { ...milestone, id: generateId(), projectId };
+      await updateDoc(doc(db, 'projects', projectId), { milestones: [...project.milestones, newMilestone], updatedAt: now() });
       addToast('success', 'Milestone added');
     } catch (error) { addToast('error', 'Failed to add milestone'); }
   };
@@ -231,7 +256,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       addToast('success', 'Milestone deleted');
     } catch (error) { addToast('error', 'Failed to delete milestone'); }
   };
-
   const completeMilestone = async (projectId: string, milestoneId: string) => {
     try {
       const project = state.projects.find(p => p.id === projectId);
@@ -242,23 +266,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const vat = state.settings.vatRate;
       const batch = writeBatch(db);
       const invoiceId = generateId();
-      batch.update(doc(db, 'projects', projectId), {
-        milestones: project.milestones.map(m => m.id === milestoneId ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId } : m), updatedAt: now()
-      });
-      const lineItem: BillingLineItem = {
-        id: generateId(), description: `Milestone: ${milestone.name}`, quantity: 1,
-        unitPrice: milestone.amount, taxCode: TaxProfile.Standard,
-        taxAmount: milestone.amount * vat, subtotal: milestone.amount,
-        total: milestone.amount * (1 + vat), milestoneId: milestone.id,
-      };
-      const newInvoice: BillingDocument = {
-        id: invoiceId, type: DocumentType.Invoice, direction: DocumentDirection.AR, status: DocumentStatus.Draft,
-        date: now().split('T')[0], dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        counterpartyId: project.clientId, counterpartyName: asFinanceCounterparties.find(c => c.id === project.clientId)?.name || 'Unknown',
-        projectId: project.id, milestoneId: milestone.id, currency: project.baseCurrency, exchangeRate: 1, lines: [lineItem],
-        subtotal: lineItem.subtotal, taxTotal: lineItem.taxAmount, total: lineItem.total, balance: lineItem.total, paidAmount: 0,
-        taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now(),
-      };
+      batch.update(doc(db, 'projects', projectId), { milestones: project.milestones.map(m => m.id === milestoneId ? { ...m, status: MilestoneStatus.Invoiced, completionDate: now(), linkedInvoiceId: invoiceId } : m), updatedAt: now() });
+      const lineItem: BillingLineItem = { id: generateId(), description: `Milestone: ${milestone.name}`, quantity: 1, unitPrice: milestone.amount, taxCode: TaxProfile.Standard, taxAmount: milestone.amount * vat, subtotal: milestone.amount, total: milestone.amount * (1 + vat), milestoneId: milestone.id };
+      const newInvoice: BillingDocument = { id: invoiceId, type: DocumentType.Invoice, direction: DocumentDirection.AR, status: DocumentStatus.Draft, date: now().split('T')[0], dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], counterpartyId: project.clientId, counterpartyName: asFinanceCounterparties.find(c => c.id === project.clientId)?.name || 'Unknown', projectId: project.id, milestoneId: milestone.id, currency: project.baseCurrency, exchangeRate: 1, lines: [lineItem], subtotal: lineItem.subtotal, taxTotal: lineItem.taxAmount, total: lineItem.total, balance: lineItem.total, paidAmount: 0, taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now() };
       batch.set(doc(db, 'billingDocuments', invoiceId), newInvoice);
       await batch.commit();
       addToast('success', 'Milestone completed — invoice draft created');
@@ -278,20 +288,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const document = state.billingDocuments.find(d => d.id === id);
       if (!document) throw new Error('Document not found');
+      const prefix = state.settings.invoicePrefix;
+      const year = new Date().getFullYear();
       const newSequence = await runTransaction(db, async (transaction) => {
         const counterRef = doc(db, 'appSettings', 'invoiceCounter');
         const counterDoc = await transaction.get(counterRef);
-        const next = (counterDoc.exists() ? (counterDoc.data().lastSequence || 0) : 0) + 1;
-        transaction.set(counterRef, { lastSequence: next }, { merge: true });
-        return next;
+        const lastSequence = counterDoc.exists() ? (counterDoc.data().lastSequence || 0) : 0;
+        const nextSequence = lastSequence + 1;
+        transaction.set(counterRef, { lastSequence: nextSequence }, { merge: true });
+        return nextSequence;
       });
-      const documentNumber = `${state.settings.invoicePrefix}${new Date().getFullYear()}-${newSequence.toString().padStart(4, '0')}`;
+      const documentNumber = `${prefix}${year}-${newSequence.toString().padStart(4, '0')}`;
       const batch = writeBatch(db);
       batch.update(doc(db, 'billingDocuments', id), { status: DocumentStatus.Issued, documentNumber, updatedAt: now() });
       if (document.projectId) {
-        const tid = generateId();
-        const tx: Transaction = { id: tid, date: now(), amount: document.total, currency: document.currency, description: `Invoice Issued: ${documentNumber}`, referenceId: document.id, type: document.direction === DocumentDirection.AR ? 'CREDIT' : 'DEBIT', category: 'Accounts Receivable', createdAt: now() };
-        batch.set(doc(db, 'transactions', tid), tx);
+        const transactionId = generateId();
+        const transactionObj: Transaction = { id: transactionId, date: now(), amount: document.total, currency: document.currency, description: `Invoice Issued: ${documentNumber}`, referenceId: document.id, type: document.direction === DocumentDirection.AR ? 'CREDIT' : 'DEBIT', category: 'Accounts Receivable', createdAt: now() };
+        batch.set(doc(db, 'transactions', transactionId), transactionObj);
       }
       await batch.commit();
       addToast('success', `Document issued: ${documentNumber}`);
@@ -345,7 +358,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const unallocated = payment.unallocatedAmount ?? 0;
         if (unallocated < amount) throw new Error('Insufficient unallocated amount');
         if (invoice.balance  < amount) throw new Error('Allocation amount exceeds invoice balance');
-        transaction.update(paymentRef, { allocations: [...(payment.allocations || []), { id: generateId(), paymentId, invoiceId, amount, date: now() }], unallocatedAmount: unallocated - amount });
+        const newAllocation = { id: generateId(), paymentId, invoiceId, amount, date: now() };
+        transaction.update(paymentRef, { allocations: [...(payment.allocations || []), newAllocation], unallocatedAmount: unallocated - amount });
         const newPaidAmount = (invoice.paidAmount ?? 0) + amount;
         const newBalance    = invoice.total - newPaidAmount;
         let   newStatus     = invoice.status;
@@ -374,39 +388,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const vat   = state.settings.vatRate;
-      const due   = state.subscriptions.filter(s => s.status === SubscriptionStatus.Active && s.nextInvoiceDate <= today);
-      if (due.length === 0) { addToast('success', 'No subscriptions due for billing'); return; }
+      const dueSubscriptions = state.subscriptions.filter(s => s.status === SubscriptionStatus.Active && s.nextInvoiceDate <= today);
+      if (dueSubscriptions.length === 0) { addToast('success', 'No subscriptions due for billing'); return; }
       type JobItem = { invoice: BillingDocument; subId: string; nextInvoiceDate: string; };
-      const items: JobItem[] = due.map(sub => {
+      const items: JobItem[] = dueSubscriptions.map(sub => {
         const invoiceId = generateId();
-        const lines: BillingLineItem[] = sub.items.map(item => ({
-          id: generateId(), description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, taxCode: item.taxCode,
-          taxAmount: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? vat : 0),
-          subtotal: item.quantity * item.unitPrice,
-          total:    (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 1 + vat : 1),
-        }));
+        const lines: BillingLineItem[] = sub.items.map(item => ({ id: generateId(), description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, taxCode: item.taxCode, taxAmount: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? vat : 0), subtotal: item.quantity * item.unitPrice, total: (item.quantity * item.unitPrice) * (item.taxCode === TaxProfile.Standard ? 1 + vat : 1) }));
         const subtotal = lines.reduce((s, l) => s + l.subtotal, 0);
         const taxTotal = lines.reduce((s, l) => s + l.taxAmount, 0);
+        const total    = subtotal + taxTotal;
         const nextDate = new Date(sub.nextInvoiceDate);
         if      (sub.billingCycle === 'Monthly')   nextDate.setMonth(nextDate.getMonth() + 1);
         else if (sub.billingCycle === 'Quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
         else if (sub.billingCycle === 'Yearly')    nextDate.setFullYear(nextDate.getFullYear() + 1);
         else if (sub.billingCycle === 'Custom')    nextDate.setDate(nextDate.getDate() + (sub.billingInterval ?? 30));
-        const invoice: BillingDocument = {
-          id: invoiceId, type: DocumentType.Invoice, direction: sub.direction === 'AR' ? DocumentDirection.AR : DocumentDirection.AP,
-          status: DocumentStatus.Draft, date: today,
-          dueDate: new Date(Date.now() + sub.paymentTermsDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          counterpartyId: sub.counterpartyId, counterpartyName: asFinanceCounterparties.find(c => c.id === sub.counterpartyId)?.name || 'Unknown',
-          subscriptionId: sub.id, currency: sub.currency, exchangeRate: 1,
-          lines, subtotal, taxTotal, total: subtotal + taxTotal, balance: subtotal + taxTotal, paidAmount: 0,
-          taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now(),
-        };
+        const invoice: BillingDocument = { id: invoiceId, type: DocumentType.Invoice, direction: sub.direction === 'AR' ? DocumentDirection.AR : DocumentDirection.AP, status: DocumentStatus.Draft, date: today, dueDate: new Date(Date.now() + sub.paymentTermsDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0], counterpartyId: sub.counterpartyId, counterpartyName: asFinanceCounterparties.find(c => c.id === sub.counterpartyId)?.name || 'Unknown', subscriptionId: sub.id, currency: sub.currency, exchangeRate: 1, lines, subtotal, taxTotal, total, balance: total, paidAmount: 0, taxProfile: TaxProfile.Standard, createdAt: now(), updatedAt: now() };
         return { invoice, subId: sub.id, nextInvoiceDate: nextDate.toISOString().split('T')[0] };
       });
+      const CHUNK = 100;
       let count = 0;
-      for (let i = 0; i < items.length; i += 100) {
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const chunk = items.slice(i, i + CHUNK);
         const batch = writeBatch(db);
-        for (const { invoice, subId, nextInvoiceDate } of items.slice(i, i + 100)) {
+        for (const { invoice, subId, nextInvoiceDate } of chunk) {
           batch.set(doc(db, 'billingDocuments', invoice.id), invoice);
           batch.update(doc(db, 'subscriptions', subId), { lastInvoiceDate: today, nextInvoiceDate, updatedAt: now() });
           count++;
@@ -431,7 +435,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addProduct = async (product: Omit<Product, 'id' | 'createdAt'>) => {
-    const id = generateId(); const newProduct = { ...product, id, createdAt: now() };
+    const id = generateId();
+    const newProduct = { ...product, id, createdAt: now() };
     dispatch({ type: 'ADD_ITEM', collection: 'products', payload: newProduct });
     try { await setDoc(doc(db, 'products', id), newProduct); addToast('success', 'Product added'); }
     catch (error) { dispatch({ type: 'DELETE_ITEM', collection: 'products', id }); addToast('error', 'Failed to add product'); }
@@ -492,7 +497,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const value: AppContextType = {
-    ...state, user,
+    ...state,
+    user,
     counterparties: asFinanceCounterparties as unknown as Counterparty[],
     addProject, updateProject, deleteProject,
     addMilestone, updateMilestone, deleteMilestone, completeMilestone,

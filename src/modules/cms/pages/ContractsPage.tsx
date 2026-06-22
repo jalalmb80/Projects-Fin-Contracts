@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ContractsList from '../components/ContractsList';
 import ContractEditor from '../components/ContractEditor';
-import { useContracts } from '../hooks/useContracts';
+import { useCMSContext } from '../context/CMSContext';
 import { Contract, ContractTemplate } from '../types';
 import { useSearchParams } from 'react-router-dom';
 
@@ -14,7 +14,7 @@ export default function ContractsPage() {
     addContract,
     updateContract,
     addTemplate,
-  } = useContracts();
+  } = useCMSContext();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [editingId, setEditingId] = useState<string | null>(null);

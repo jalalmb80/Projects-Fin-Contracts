@@ -44,16 +44,13 @@ export default function ProjectListPage() {
 
   const formatCurrency = (amount: number, currency: string) =>
     new Intl.NumberFormat(lang === 'ar' ? 'ar-SA' : 'en-US', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0
+      style: 'currency', currency, maximumFractionDigits: 0
     }).format(amount);
 
   const activeCount = filteredProjects.filter(p => p.status === ProjectStatus.Active).length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t('المشاريع', 'Projects', lang)}</h1>
@@ -64,7 +61,7 @@ export default function ProjectListPage() {
         </div>
         <button
           onClick={() => { setEditingProject(undefined); setIsModalOpen(true); }}
-          className="inline-flex items-center px-4 py-2 rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+          className="inline-flex items-center px-4 py-2 rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
         >
           <Plus className="-ml-1 mr-2 h-5 w-5" />
           {t('مشروع جديد', 'New Project', lang)}
@@ -72,7 +69,6 @@ export default function ProjectListPage() {
       </div>
 
       <div className="bg-white shadow-sm rounded-xl border border-slate-100 overflow-hidden">
-        {/* Filter Bar */}
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex flex-col sm:flex-row gap-3 flex-1">
             <div className="relative rounded-lg shadow-sm max-w-xs flex-1">
@@ -81,7 +77,7 @@ export default function ProjectListPage() {
               </div>
               <input
                 type="text"
-                className="block w-full pl-10 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                className="block w-full pl-10 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white"
                 placeholder={t('بحث في المشاريع أو العملاء...', 'Search projects or clients...', lang)}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -92,7 +88,7 @@ export default function ProjectListPage() {
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="block pl-3 pr-10 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="block pl-3 pr-10 py-2 text-sm border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="All">{t('جميع الحالات', 'All Statuses', lang)}</option>
                 {Object.values(ProjectStatus).map(s => (
@@ -109,9 +105,7 @@ export default function ProjectListPage() {
         </div>
 
         {loading.projects ? (
-          <div className="p-12 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600" />
-          </div>
+          <div className="p-12 text-center"><div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600" /></div>
         ) : filteredProjects.length === 0 ? (
           <div className="p-12 text-center">
             <Briefcase className="mx-auto h-12 w-12 text-slate-300" />
@@ -144,13 +138,11 @@ export default function ProjectListPage() {
                     isPast(parseISO(project.endDate)) &&
                     project.status !== ProjectStatus.Completed &&
                     project.status !== ProjectStatus.Cancelled;
-
                   return (
                     <tr key={project.id} className="hover:bg-slate-50 transition-colors">
-                      {/* Project Name */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0 h-10 w-10 bg-primary-50 rounded-xl flex items-center justify-center text-primary-600 font-bold text-sm">
+                          <div className="flex-shrink-0 h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-sm">
                             {project.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
@@ -162,57 +154,35 @@ export default function ProjectListPage() {
                           </div>
                         </div>
                       </td>
-                      {/* Client */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
-                        {getClientName(project.clientId)}
-                      </td>
-                      {/* Contract */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{getClientName(project.clientId)}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-slate-900">
-                          {formatCurrency(project.contractValue, project.baseCurrency)}
-                        </div>
+                        <div className="text-sm font-medium text-slate-900">{formatCurrency(project.contractValue, project.baseCurrency)}</div>
                         <div className="text-xs text-slate-400">{tEnum(project.contractType, lang)}</div>
                       </td>
-                      {/* Status */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(project.status)}`}>
                           {tEnum(project.status, lang)}
                         </span>
                       </td>
-                      {/* Budget Health */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="w-full max-w-[140px]">
                           <div className="flex justify-between items-center text-xs mb-1">
-                            <span className={budgetPct > 100 ? 'text-rose-600 font-semibold' : 'text-slate-500'}>
-                              {Math.round(budgetPct)}%
-                            </span>
-                            {budgetPct > 100 && (
-                              <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
-                            )}
+                            <span className={budgetPct > 100 ? 'text-rose-600 font-semibold' : 'text-slate-500'}>{Math.round(budgetPct)}%</span>
+                            {budgetPct > 100 && <AlertCircle className="h-3.5 w-3.5 text-rose-500" />}
                           </div>
                           <div className="w-full bg-slate-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full transition-all ${
-                                budgetPct > 100 ? 'bg-rose-500' :
-                                budgetPct > 80  ? 'bg-amber-500' : 'bg-emerald-500'
-                              }`}
-                              style={{ width: `${Math.min(budgetPct, 100)}%` }}
-                            />
+                            <div className={`h-2 rounded-full transition-all ${
+                              budgetPct > 100 ? 'bg-rose-500' : budgetPct > 80 ? 'bg-amber-500' : 'bg-emerald-500'
+                            }`} style={{ width: `${Math.min(budgetPct, 100)}%` }} />
                           </div>
                         </div>
                       </td>
-                      {/* Milestones */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <span className={`font-semibold ${
-                          completedMs === project.milestones.length && project.milestones.length > 0
-                            ? 'text-emerald-600'
-                            : 'text-slate-700'
-                        }`}>
-                          {completedMs}
-                        </span>
+                          completedMs === project.milestones.length && project.milestones.length > 0 ? 'text-emerald-600' : 'text-slate-700'
+                        }`}>{completedMs}</span>
                         <span className="text-slate-400"> / {project.milestones.length}</span>
                       </td>
-                      {/* End Date */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {project.endDate ? (
                           <span className={`inline-flex items-center gap-1 ${
@@ -221,16 +191,10 @@ export default function ProjectListPage() {
                             {isEndDateOverdue && <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />}
                             {format(parseISO(project.endDate), 'MMM d, yyyy')}
                           </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
+                        ) : (<span className="text-slate-300">—</span>)}
                       </td>
-                      {/* View Link */}
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          to={`/finance/projects/${project.id}`}
-                          className="text-primary-600 hover:text-primary-800 transition-colors"
-                        >
+                        <Link to={`/finance/projects/${project.id}`} className="text-indigo-600 hover:text-indigo-800 transition-colors">
                           <ChevronRight className="h-5 w-5" />
                         </Link>
                       </td>
